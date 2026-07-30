@@ -1,0 +1,450 @@
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Linq;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using TvShowsPlayer.Core;
+
+namespace TvShowsPlayer.App;
+
+/// <summary>
+/// Окно настроек (1c). Вкладка «Плейлист» — живой медиа-менеджер: порядок сериалов
+/// перетаскиванием (drag-drop), галочки «в канале», карточка «сейчас в эфире» и
+/// очередь «Далее» с авто-обновлением по IPC, пересборка с сохранением играющего.
+/// </summary>
+public partial class SettingsWindow : Window
+{
+    private const string DragFormat = "jetix.show";
+
+    private readonly AppConfig _config;
+    private readonly string _configPath;
+    private readonly MpvController? _controller;
+
+    private readonly Dictionary<string, Show> _showsByName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ObservableCollection<ShowRow> _showRows = new();
+
+    private ListBox _showsList = null!;
+    private ListBox _queueList = null!;
+    private ComboBox _audioBox = null!;
+    private CheckBox _autostartBox = null!;
+    private TextBlock _nowPlaying = null!;
+    private CheckBox _preserveCurrent = null!;
+    private TextBlock _playlistStatus = null!;
+    private TextBlock _status = null!;
+
+    private ShowRow? _dragItem;
+    private ShowRow? _draggingRow;
+    private Point _dragStart;
+    private DispatcherTimer? _refreshTimer;
+
+    public SettingsWindow() : this(new AppConfig(), string.Empty, null)
+    {
+    }
+
+    public SettingsWindow(AppConfig config, string configPath, MpvController? controller)
+    {
+        _config = config;
+        _configPath = configPath;
+        _controller = controller;
+        AvaloniaXamlLoader.Load(this);
+        DataContext = _config;
+
+        _showsList = this.FindControl<ListBox>("ShowsList")!;
+        _queueList = this.FindControl<ListBox>("QueueList")!;
+        _audioBox = this.FindControl<ComboBox>("AudioDeviceBox")!;
+        _nowPlaying = this.FindControl<TextBlock>("NowPlaying")!;
+        _preserveCurrent = this.FindControl<CheckBox>("PreserveCurrent")!;
+        _playlistStatus = this.FindControl<TextBlock>("PlaylistStatus")!;
+        _status = this.FindControl<TextBlock>("StatusText")!;
+        _autostartBox = this.FindControl<CheckBox>("AutostartBox")!;
+        _autostartBox.IsChecked = Autostart.IsEnabled();
+
+        PopulateAudioDevices();
+        PopulateShows();
+        SetupDragDrop();
+        SetupAutoRefresh();
+    }
+
+    private void OnAutostartToggled(object? sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox box)
+            Autostart.Set(box.IsChecked == true);
+    }
+
+    // ---- сериалы: порядок (drag-drop / ↑↓) + «в канале» ----
+    private void PopulateShows()
+    {
+        var scanned = ScanShows();
+        _showsByName.Clear();
+        foreach (var s in scanned)
+            _showsByName[s.Name] = s;
+
+        var ordered = ShowOrdering.Apply(scanned, _config.ShowOrder);
+        var excluded = new HashSet<string>(_config.ExcludedShows, StringComparer.OrdinalIgnoreCase);
+
+        _showRows.Clear();
+        foreach (var s in ordered)
+            _showRows.Add(new ShowRow { Name = s.Name, IsIncluded = !excluded.Contains(s.Name) });
+
+        _showsList.ItemsSource = _showRows;
+    }
+
+    private IReadOnlyList<Show> ScanShows()
+    {
+        try
+        {
+            return ShowScanner.Scan(_config.CartoonsRoot);
+        }
+        catch
+        {
+            return Array.Empty<Show>();
+        }
+    }
+
+    private void OnMoveUp(object? sender, RoutedEventArgs e) => Move(-1);
+
+    private void OnMoveDown(object? sender, RoutedEventArgs e) => Move(+1);
+
+    private void Move(int delta)
+    {
+        var i = _showsList.SelectedIndex;
+        var j = i + delta;
+        if (i < 0 || j < 0 || j >= _showRows.Count)
+            return;
+
+        _showRows.Move(i, j);
+        _showsList.SelectedIndex = j;
+    }
+
+    private void SetupDragDrop()
+    {
+        _showsList.AddHandler(PointerPressedEvent, ShowsPointerPressed, RoutingStrategies.Tunnel);
+        _showsList.AddHandler(PointerMovedEvent, ShowsPointerMoved, RoutingStrategies.Tunnel);
+        DragDrop.SetAllowDrop(_showsList, true);
+        _showsList.AddHandler(DragDrop.DragOverEvent, ShowsDragOver);
+        _showsList.AddHandler(DragDrop.DropEvent, ShowsDrop);
+    }
+
+    private void ShowsPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _dragItem = (e.Source as Control)?.DataContext as ShowRow;
+        _dragStart = e.GetPosition(_showsList);
+    }
+
+    private async void ShowsPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragItem is null)
+            return;
+        if (!e.GetCurrentPoint(_showsList).Properties.IsLeftButtonPressed)
+        {
+            _dragItem = null;
+            return;
+        }
+
+        var p = e.GetPosition(_showsList);
+        if (Math.Abs(p.X - _dragStart.X) < 4 && Math.Abs(p.Y - _dragStart.Y) < 4)
+            return;
+
+        var row = _dragItem;
+        _dragItem = null;
+        _draggingRow = row;
+        _showsList.SelectedItem = row;
+
+        var data = new DataObject();
+        data.Set(DragFormat, row);
+        try
+        {
+            await DragDrop.DoDragDrop(e, data, DragDropEffects.Move);
+        }
+        finally
+        {
+            _draggingRow = null;
+        }
+    }
+
+    // Живая перестановка: пока тянем, элемент переезжает под курсор — список
+    // расступается в реальном времени. На Drop уже всё на месте.
+    private void ShowsDragOver(object? sender, DragEventArgs e)
+    {
+        if (_draggingRow is null || !e.Data.Contains(DragFormat))
+        {
+            e.DragEffects = DragDropEffects.None;
+            return;
+        }
+
+        e.DragEffects = DragDropEffects.Move;
+
+        var target = (e.Source as Control)?.DataContext as ShowRow;
+        if (target is null || ReferenceEquals(target, _draggingRow))
+            return;
+
+        var from = _showRows.IndexOf(_draggingRow);
+        var to = _showRows.IndexOf(target);
+        if (from >= 0 && to >= 0 && from != to)
+        {
+            _showRows.Move(from, to);
+            _showsList.SelectedItem = _draggingRow;
+        }
+    }
+
+    private void ShowsDrop(object? sender, DragEventArgs e)
+    {
+        _draggingRow = null;   // уже переставлено в DragOver
+    }
+
+    private void ApplyShowConfig()
+    {
+        _config.ShowOrder = _showRows.Select(r => r.Name).ToList();
+        _config.ExcludedShows = _showRows.Where(r => !r.IsIncluded).Select(r => r.Name).ToList();
+    }
+
+    // ---- живая панель «Сейчас в эфире» + «Далее» ----
+    private void SetupAutoRefresh()
+    {
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _refreshTimer.Tick += (_, _) => _ = RefreshNowAndNext();
+        _refreshTimer.Start();
+        Closed += (_, _) => _refreshTimer?.Stop();
+        _ = RefreshNowAndNext();
+    }
+
+    private async Task RefreshNowAndNext()
+    {
+        // IPC-граница + async void выше: ошибка не должна ронять приложение.
+        try
+        {
+            if (_controller is null)
+            {
+                _nowPlaying.Text = "(нет связи с mpv)";
+                return;
+            }
+
+            var pos = await _controller.GetPlaylistPosAsync();
+            var path = await _controller.GetCurrentPathAsync();
+            var now = ShowAndRel(path);
+            _nowPlaying.Text = now is { } v ? $"{v.Show} · {Path.GetFileName(path)}" : "—";
+
+            var entries = ReadDevPlaylist();
+            var queue = new List<QueueItem>();
+            for (var i = pos + 1; i < entries.Count && queue.Count < 16; i++)
+            {
+                var q = ShowAndRel(entries[i]);
+                var label = q is { } qq ? $"{qq.Show} · {Path.GetFileName(entries[i])}" : Path.GetFileName(entries[i]);
+                queue.Add(new QueueItem { Index = i, Label = label ?? string.Empty });
+            }
+
+            _queueList.ItemsSource = queue;
+        }
+        catch
+        {
+            // молча — фоновый опрос
+        }
+    }
+
+    private void OnRefreshNow(object? sender, RoutedEventArgs e) => _ = RefreshNowAndNext();
+
+    private async void OnQueueJump(object? sender, TappedEventArgs e)
+    {
+        try
+        {
+            if (_controller is null || _queueList.SelectedItem is not QueueItem item)
+                return;
+
+            await _controller.SetPlaylistPosAsync(item.Index);
+            await RefreshNowAndNext();
+        }
+        catch (Exception ex)
+        {
+            _playlistStatus.Text = $"Ошибка перехода: {ex.Message}";
+        }
+    }
+
+    // ---- пересборка (с сохранением играющего сериала) ----
+    private async void OnRebuild(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ApplyShowConfig();
+            var dir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
+            var playlistPath = Path.Combine(dir, "channel.m3u");
+            var statePath = Path.Combine(dir, "jetix-channel-state.json");
+
+            if (_preserveCurrent.IsChecked == true && _controller is not null)
+            {
+                var sr = ShowAndRel(await _controller.GetCurrentPathAsync());
+                if (sr is { } v)
+                {
+                    var st = ChannelState.Load(statePath);
+                    st.Current = v.Show;
+                    st.Shows[v.Show] = v.Rel;
+                    st.Save(statePath);
+                }
+            }
+
+            var result = ChannelBuilder.Build(new ChannelBuildOptions
+            {
+                Root = _config.CartoonsRoot,
+                PlaylistPath = playlistPath,
+                StatePath = statePath,
+                ExcludedShows = _config.ExcludedShows,
+                ShowOrder = _config.ShowOrder,
+                Window = _config.Window,
+                Step = _config.Step,
+                CapRotations = _config.CapRotations,
+                Force = true,
+            });
+
+            var pos = ChannelState.Load(statePath).PlaylistPos;
+            if (_controller is not null)
+            {
+                await _controller.ReloadPlaylistAsync(playlistPath);
+                await _controller.SetPlaylistPosAsync(pos);
+            }
+
+            _playlistStatus.Text = $"Пересобрано: {result.ShowCount} сериалов, {result.PlaylistLength} записей · указатель → {pos}.";
+            await RefreshNowAndNext();
+        }
+        catch (Exception ex)
+        {
+            _playlistStatus.Text = $"Ошибка пересборки: {ex.Message}";
+        }
+    }
+
+    private List<string> ReadDevPlaylist()
+    {
+        var dir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
+        var m3u = Path.Combine(dir, "channel.m3u");
+        if (!File.Exists(m3u))
+            return new List<string>();
+
+        return File.ReadAllLines(m3u)
+            .Where(l => l.Length > 0 && !l.StartsWith('#'))
+            .ToList();
+    }
+
+    // Полный путь → (сериал, rel относительно папки сериала) под корнем библиотеки.
+    private (string Show, string Rel)? ShowAndRel(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return null;
+
+        var root = _config.CartoonsRoot.Replace('/', '\\');
+        if (!root.EndsWith('\\'))
+            root += "\\";
+
+        var p = path.Replace('/', '\\');
+        if (!p.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var tail = p[root.Length..];
+        var slash = tail.IndexOf('\\');
+        if (slash <= 0 || slash >= tail.Length - 1)
+            return null;
+
+        return (tail[..slash], tail[(slash + 1)..]);
+    }
+
+    // ---- аудио-устройства ----
+    private void PopulateAudioDevices()
+    {
+        var devices = QueryAudioDevices(_config.MpvPath);
+        _audioBox.ItemsSource = devices;
+        _audioBox.SelectedItem = devices.FirstOrDefault(d => d.Id == _config.AudioDevice)
+                                 ?? devices.FirstOrDefault(d => d.Id == "auto");
+    }
+
+    private static IReadOnlyList<AudioDevice> QueryAudioDevices(string mpvPath)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(mpvPath, "--audio-device=help")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var proc = Process.Start(psi);
+            if (proc is null)
+                return Array.Empty<AudioDevice>();
+
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(3000);
+            return AudioDevices.Parse(output);
+        }
+        catch
+        {
+            return Array.Empty<AudioDevice>();
+        }
+    }
+
+    private void OnAudioDeviceChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { SelectedItem: AudioDevice device })
+            _config.AudioDevice = device.Id;
+    }
+
+    // ---- пикеры путей ----
+    private async void OnBrowseMpv(object? sender, RoutedEventArgs e)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Выбери mpv.exe",
+            AllowMultiple = false,
+            FileTypeFilter = new[] { new FilePickerFileType("Программа") { Patterns = new[] { "*.exe" } } },
+        });
+
+        if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
+            SetText("MpvPathBox", path);
+    }
+
+    private async void OnBrowseCartoons(object? sender, RoutedEventArgs e)
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Выбери папку с мультфильмами",
+            AllowMultiple = false,
+        });
+
+        if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
+        {
+            _config.CartoonsRoot = path;
+            SetText("CartoonsRootBox", path);
+            PopulateShows();
+        }
+    }
+
+    private void SetText(string controlName, string text)
+    {
+        if (this.FindControl<TextBox>(controlName) is { } box)
+            box.Text = text;
+    }
+
+    // ---- сохранить ----
+    private void OnSave(object? sender, RoutedEventArgs e)
+    {
+        ApplyShowConfig();
+        if (!string.IsNullOrEmpty(_configPath))
+            _config.Save(_configPath);
+
+        _status.Text = $"Сохранено · {DateTime.Now:HH:mm:ss}.";
+    }
+}
+
+/// <summary>Строка списка сериалов: имя, порядок (позиция) и «в канале».</summary>
+public sealed class ShowRow
+{
+    public string Name { get; init; } = string.Empty;
+    public bool IsIncluded { get; set; } = true;
+}
+
+/// <summary>Элемент очереди «Далее»: индекс в плейлисте и подпись.</summary>
+public sealed class QueueItem
+{
+    public int Index { get; init; }
+    public string Label { get; init; } = string.Empty;
+}

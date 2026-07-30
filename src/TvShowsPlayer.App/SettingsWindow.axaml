@@ -1,0 +1,281 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="TvShowsPlayer.App.SettingsWindow"
+        Title="JETIX — Настройки"
+        Width="780" Height="560"
+        MinWidth="640" MinHeight="440"
+        RequestedThemeVariant="Dark"
+        Background="#313338"
+        WindowStartupLocation="CenterScreen">
+
+  <Window.Styles>
+    <!-- сайдбар-вкладки (как категории Discord) -->
+    <Style Selector="TabControl">
+      <Setter Property="Background" Value="#313338" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="TabItem">
+      <Setter Property="Width" Value="192" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Margin" Value="8,2" />
+      <Setter Property="Padding" Value="14,0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="#b5bac1" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+    <Style Selector="TabItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#35373c" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="TabItem:selected">
+      <Setter Property="Foreground" Value="#ffffff" />
+    </Style>
+    <Style Selector="TabItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#404249" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <!-- типографика -->
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#f2f3f5" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="#b5bac1" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="0,18,0,6" />
+    </Style>
+
+    <!-- поля ввода -->
+    <Style Selector="TextBox">
+      <Setter Property="Background" Value="#1e1f22" />
+      <Setter Property="Foreground" Value="#dbdee1" />
+      <Setter Property="CaretBrush" Value="#dbdee1" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="#1e1f22" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="12,9" />
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+    <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+      <Setter Property="BorderBrush" Value="#5865F2" />
+    </Style>
+    <Style Selector="NumericUpDown">
+      <Setter Property="Background" Value="#1e1f22" />
+      <Setter Property="Foreground" Value="#dbdee1" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="MinWidth" Value="170" />
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="Background" Value="#1e1f22" />
+      <Setter Property="Foreground" Value="#dbdee1" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="12,8" />
+    </Style>
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="#2b2d31" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="4" />
+    </Style>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Foreground" Value="#dbdee1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="Margin" Value="0,1" />
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="#404249" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="Foreground" Value="#dbdee1" />
+      <Setter Property="Margin" Value="0,12,0,0" />
+    </Style>
+
+    <!-- кнопки -->
+    <Style Selector="Button">
+      <Setter Property="Background" Value="#4e5058" />
+      <Setter Property="Foreground" Value="#ffffff" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="16,9" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#6d6f78" />
+    </Style>
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="#5865F2" />
+    </Style>
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#4752c4" />
+    </Style>
+
+    <!-- пульсирующая точка LIVE -->
+    <Style Selector="Ellipse.live">
+      <Style.Animations>
+        <Animation Duration="0:0:1.3" IterationCount="INFINITE">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1.0" /></KeyFrame>
+          <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.25" /></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1.0" /></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="*,Auto">
+    <TabControl TabStripPlacement="Left" Grid.Row="0">
+
+      <TabItem Header="Пути">
+        <StackPanel Margin="28,24" MaxWidth="540" HorizontalAlignment="Left">
+          <TextBlock Classes="section" Text="Пути" />
+          <TextBlock Classes="label" Text="ПУТЬ К MPV.EXE" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" x:Name="MpvPathBox" Text="{Binding MpvPath, Mode=TwoWay}" />
+            <Button Grid.Column="1" Content="Обзор…" Click="OnBrowseMpv" Margin="8,0,0,0" />
+          </Grid>
+          <TextBlock Classes="label" Text="ПАПКА С МУЛЬТФИЛЬМАМИ" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" x:Name="CartoonsRootBox" Text="{Binding CartoonsRoot, Mode=TwoWay}" />
+            <Button Grid.Column="1" Content="Обзор…" Click="OnBrowseCartoons" Margin="8,0,0,0" />
+          </Grid>
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="Карусель">
+        <StackPanel Margin="28,24" MaxWidth="460" HorizontalAlignment="Left">
+          <TextBlock Classes="section" Text="Карусель" />
+          <TextBlock Classes="label" Text="ОКНО (СЕРИЙ В БЛОКЕ)" />
+          <NumericUpDown Value="{Binding Window, Mode=TwoWay}" Minimum="1" Maximum="20" Increment="1" />
+          <TextBlock Classes="label" Text="ШАГ (СДВИГ БЛОКА)" />
+          <NumericUpDown Value="{Binding Step, Mode=TwoWay}" Minimum="1" Maximum="20" Increment="1" />
+          <TextBlock Classes="label" Text="ПОТОЛОК РОТАЦИЙ" />
+          <NumericUpDown Value="{Binding CapRotations, Mode=TwoWay}" Minimum="1" Maximum="1000" Increment="10" />
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="Плеер">
+        <StackPanel Margin="28,24" MaxWidth="460" HorizontalAlignment="Left">
+          <TextBlock Classes="section" Text="Плеер" />
+          <TextBlock Classes="label" Text="ГРОМКОСТЬ" />
+          <NumericUpDown Value="{Binding Volume, Mode=TwoWay}" Minimum="0" Maximum="130" Increment="5" />
+          <TextBlock Classes="label" Text="ЭКРАН (fs-screen)" />
+          <NumericUpDown Value="{Binding FsScreen, Mode=TwoWay}" Minimum="0" Maximum="10" Increment="1" />
+          <TextBlock Classes="label" Text="АУДИО-УСТРОЙСТВО" />
+          <ComboBox x:Name="AudioDeviceBox" HorizontalAlignment="Left" MinWidth="400"
+                    SelectionChanged="OnAudioDeviceChanged">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Description}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <CheckBox x:Name="AutostartBox" Content="Запускать при входе в систему"
+                    Click="OnAutostartToggled" Margin="0,20,0,0" />
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="Плейлист">
+        <Grid Margin="20,20" RowDefinitions="Auto,*,Auto" ColumnDefinitions="290,*">
+
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="section" Text="Порядок сериалов" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Classes="section" Text="Серии" Margin="16,0,0,0" />
+
+          <DockPanel Grid.Row="1" Grid.Column="0">
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+              <Button Content="↑" Click="OnMoveUp" Width="42" />
+              <Button Content="↓" Click="OnMoveDown" Width="42" />
+              <TextBlock Text="галочка = в канале" Foreground="#949ba4"
+                         VerticalAlignment="Center" FontSize="12" />
+            </StackPanel>
+            <ListBox x:Name="ShowsList" Background="#2b2d31">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="Auto,*">
+                    <CheckBox Grid.Column="0" IsChecked="{Binding IsIncluded, Mode=TwoWay}"
+                              VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                               Margin="6,0,0,0" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+
+          <DockPanel Grid.Row="1" Grid.Column="1" Margin="16,0,0,0">
+            <Border DockPanel.Dock="Top" Background="#1e1f22" CornerRadius="6" Padding="14,12" Margin="0,0,0,10">
+              <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Ellipse Classes="live" Width="10" Height="10" Fill="#f23f43" VerticalAlignment="Center" />
+                  <TextBlock Text="СЕЙЧАС В ЭФИРЕ" Foreground="#949ba4" FontSize="12" FontWeight="Bold"
+                             VerticalAlignment="Center" />
+                  <Button Content="⟳" Click="OnRefreshNow" Padding="8,2" />
+                </StackPanel>
+                <TextBlock x:Name="NowPlaying" Text="—" Foreground="#f2f3f5" FontSize="16"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Border>
+            <TextBlock DockPanel.Dock="Top" Text="Далее (двойной клик — перейти)" Foreground="#b5bac1"
+                       FontSize="12" FontWeight="Bold" Margin="2,0,0,6" />
+            <ListBox x:Name="QueueList" Background="#2b2d31" FontSize="13" DoubleTapped="OnQueueJump">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+
+          <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Background="#2b2d31"
+                  CornerRadius="4" Padding="12,10" Margin="0,12,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="14">
+              <Button Classes="accent" Content="Пересобрать" Click="OnRebuild" />
+              <CheckBox x:Name="PreserveCurrent" Content="остаться на текущей серии"
+                        IsChecked="True" VerticalAlignment="Center" />
+              <TextBlock x:Name="PlaylistStatus" Foreground="#949ba4" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="OSD">
+        <StackPanel Margin="28,24" MaxWidth="460" HorizontalAlignment="Left">
+          <TextBlock Classes="section" Text="OSD" />
+          <TextBlock Classes="label" Text="ИМЯ КАНАЛА" />
+          <TextBox Text="{Binding ChannelName, Mode=TwoWay}" />
+          <TextBlock Classes="label" Text="ЗАСТАВКА, СЕК" />
+          <NumericUpDown Value="{Binding SplashSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
+          <TextBlock Classes="label" Text="БАМПЕР «ДАЛЕЕ», СЕК" />
+          <NumericUpDown Value="{Binding BumperSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
+          <TextBlock Classes="label" Text="ПЛАШКА СЕРИИ, СЕК" />
+          <NumericUpDown Value="{Binding PlashkaSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
+          <CheckBox IsChecked="{Binding ClockEnabled, Mode=TwoWay}" Content="Часы в углу" />
+          <CheckBox IsChecked="{Binding RetroTheme, Mode=TwoWay}" Content="Ретро-тема" />
+        </StackPanel>
+      </TabItem>
+
+    </TabControl>
+
+    <Border Grid.Row="1" Background="#2b2d31" Padding="20,14">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock x:Name="StatusText" Grid.Column="0" VerticalAlignment="Center"
+                   Foreground="#949ba4" FontSize="13" />
+        <Button Grid.Column="1" Classes="accent" Content="Сохранить" Click="OnSave" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

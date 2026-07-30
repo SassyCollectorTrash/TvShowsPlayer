@@ -55,3 +55,11 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# --- App-specific ---
+publish/
+.idea/
+*.user
+
+# Internal design notes / session specs (personal paths, not for the public repo)
+docs/
