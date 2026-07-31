@@ -30,10 +30,36 @@ internal static class AppLog
         }
     }
 
+    // Журнал пишется подробно, поэтому ограничиваем размер: при превышении текущий
+    // файл становится .old (одна прошлая копия), и запись начинается заново.
+    private const long MaxLogBytes = 2 * 1024 * 1024;
+
+    private static readonly object Gate = new();
+
     public static void Write(string message)
     {
         if (_logPath is null)
             return;
+
+        lock (Gate)
+        {
+            WriteLine(message);
+        }
+    }
+
+    private static void WriteLine(string message)
+    {
+        if (_logPath is null)
+            return;
+
+        try
+        {
+            Rotate();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // не смогли повернуть — просто продолжаем писать
+        }
 
         try
         {
@@ -48,6 +74,16 @@ internal static class AppLog
         {
             // журнал не должен мешать работе канала
         }
+    }
+
+    private static void Rotate()
+    {
+        if (_logPath is null || !File.Exists(_logPath) || new FileInfo(_logPath).Length < MaxLogBytes)
+            return;
+
+        var old = _logPath + ".old";
+        File.Delete(old);
+        File.Move(_logPath, old);
     }
 
     /// <summary>Показать пользователю фатальную ошибку (без неё окно просто не появится).</summary>

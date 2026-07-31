@@ -12,6 +12,7 @@ public sealed class MpvSupervisor : IDisposable
     private readonly string _mpvPath;
     private readonly IReadOnlyList<string> _args;
     private Process? _process;
+    private ProcessJob? _job;
 
     public event EventHandler? Exited;
 
@@ -36,6 +37,12 @@ public sealed class MpvSupervisor : IDisposable
         var process = new Process { StartInfo = info, EnableRaisingEvents = true };
         process.Exited += (_, _) => Exited?.Invoke(this, EventArgs.Empty);
         process.Start();
+
+        // Привязываем к группе: если приложение снимут или оно упадёт, mpv умрёт
+        // вместе с ним, а не останется играть без пульта.
+        _job ??= new ProcessJob();
+        if (!_job.Assign(process))
+            AppLog.Write("не удалось привязать проигрыватель к приложению — он может пережить его при аварийном закрытии");
 
         _process = process;
     }
@@ -93,5 +100,10 @@ public sealed class MpvSupervisor : IDisposable
         _process = null;
     }
 
-    public void Dispose() => StopCurrent();
+    public void Dispose()
+    {
+        StopCurrent();
+        _job?.Dispose();
+        _job = null;
+    }
 }

@@ -29,6 +29,29 @@ public sealed class MpvController : IDisposable
 
     public bool IsConnected => _client is not null;
 
+    /// <summary>
+    /// Закрыть проигрыватель, оставшийся от прошлого запуска. На именованном канале
+    /// с нашим именем может отвечать только НАШ mpv, поэтому чужие плееры не тронем.
+    /// Возвращает true, если сирота нашлась и её попросили закрыться.
+    /// </summary>
+    public static async Task<bool> QuitOrphanAsync(string pipeName)
+    {
+        try
+        {
+            using var connection = await NamedPipeMpvConnection.ConnectAsync(pipeName, timeoutMs: 700);
+            using var client = new MpvIpcClient(connection);
+
+            await client.SendCommandAsync(new object[] { "quit" }, CancellationToken.None);
+            await Task.Delay(700);   // даём процессу закрыться до старта нового
+
+            return true;
+        }
+        catch
+        {
+            return false;   // никто не ответил — сирот нет, это норма
+        }
+    }
+
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         const int maxAttempts = 40;
@@ -136,6 +159,7 @@ public sealed class MpvController : IDisposable
         }
         catch (Exception ex) when (IsConnectionLost(ex))
         {
+            AppLog.Write($"связь с плеером оборвалась при запросе «{property}» ({ex.GetType().Name}) — переподключаюсь");
             DropConnection(client);
             return default;
         }
@@ -147,9 +171,15 @@ public sealed class MpvController : IDisposable
 
     private async Task SendAsync(IReadOnlyList<object> command, CancellationToken cancellationToken)
     {
+        var text = string.Join(" ", command);
         var client = _client;
         if (client is null)
+        {
+            AppLog.Write($"плееру НЕ отправлено (нет связи): {text}");
             return;
+        }
+
+        AppLog.Write($"плееру: {text}");
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(OperationTimeout);
@@ -169,10 +199,11 @@ public sealed class MpvController : IDisposable
         }
         catch (OperationCanceledException)
         {
-            // mpv не ответил вовремя — команда пропущена, приложение живёт дальше
+            AppLog.Write($"плеер не ответил вовремя: {text}");
         }
         catch (Exception ex) when (IsConnectionLost(ex))
         {
+            AppLog.Write($"связь с плеером оборвалась ({ex.GetType().Name}) — переподключаюсь");
             DropConnection(client);
         }
         finally
@@ -209,8 +240,11 @@ public sealed class MpvController : IDisposable
         try
         {
             await Task.Delay(500);   // даём mpv подняться заново
-            if (!_disposed)
-                await ConnectAsync();
+            if (_disposed)
+                return;
+
+            await ConnectAsync();
+            AppLog.Write(IsConnected ? "связь с плеером восстановлена" : "переподключиться не удалось");
         }
         catch
         {

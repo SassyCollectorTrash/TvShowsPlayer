@@ -264,7 +264,17 @@ public partial class App : Application
             Fullscreen = isProd,
         };
 
-        _supervisor = new MpvSupervisor(config.MpvPath, MpvLaunchArgs.Build(options));
+        // Проигрыватель прошлого запуска мог остаться жив (приложение сняли или оно
+        // упало). Два mpv на одном канале — это молчащий пульт и «выход не
+        // останавливает показ», поэтому сначала убираем сироту.
+        // Task.Run — чтобы ожидание шло вне потока интерфейса (иначе рискуем встать).
+        if (Task.Run(() => MpvController.QuitOrphanAsync(pipeName)).GetAwaiter().GetResult())
+            AppLog.Write("найден проигрыватель от прошлого запуска — закрыт");
+
+        var launchArgs = MpvLaunchArgs.Build(options);
+        AppLog.Write($"запускаю проигрыватель: {config.MpvPath} {string.Join(" ", launchArgs)}");
+
+        _supervisor = new MpvSupervisor(config.MpvPath, launchArgs);
         _supervisor.Exited += OnMpvExited;
         _supervisor.Start();
 
@@ -470,6 +480,8 @@ public partial class App : Application
 
     private void OnHotkey(HotkeyAction action)
     {
+        AppLog.Write($"КЛАВИШИ: {action} ({Hotkeys.KeyName(action)})");
+
         switch (action)
         {
             case HotkeyAction.Pause: _ = _controller?.PauseAsync(); break;
@@ -541,11 +553,27 @@ public partial class App : Application
     }
 
     // ---- обработчики пунктов меню (App.axaml) ----
-    private void OnPausePlay(object? sender, EventArgs e) => _ = _controller?.PauseAsync();
+    // Каждое действие пользователя попадает в журнал: без этого разбирать «нажал —
+    // ничего не произошло» приходится вслепую.
+    private static void LogMenu(string action) => AppLog.Write($"МЕНЮ: {action}");
 
-    private void OnVolumeUp(object? sender, EventArgs e) => ChangeVolume(5);
+    private void OnPausePlay(object? sender, EventArgs e)
+    {
+        LogMenu("пауза / продолжить");
+        _ = _controller?.PauseAsync();
+    }
 
-    private void OnVolumeDown(object? sender, EventArgs e) => ChangeVolume(-5);
+    private void OnVolumeUp(object? sender, EventArgs e)
+    {
+        LogMenu("громче");
+        ChangeVolume(5);
+    }
+
+    private void OnVolumeDown(object? sender, EventArgs e)
+    {
+        LogMenu("тише");
+        ChangeVolume(-5);
+    }
 
     // Громкость должна пережить перезапуск: mpv.conf генерируется из конфига, поэтому
     // подкрученный уровень запоминаем. Пишем не на каждый шаг, а спустя паузу —
@@ -592,19 +620,47 @@ public partial class App : Application
         }
     }
 
-    private void OnNextEpisode(object? sender, EventArgs e) => _ = _controller?.NextEpisodeAsync();
+    private void OnNextEpisode(object? sender, EventArgs e)
+    {
+        LogMenu("следующая серия");
+        _ = _controller?.NextEpisodeAsync();
+    }
 
-    private void OnNextShow(object? sender, EventArgs e) => _ = _controller?.NextShowAsync();
+    private void OnNextShow(object? sender, EventArgs e)
+    {
+        LogMenu("следующий сериал");
+        _ = _controller?.NextShowAsync();
+    }
 
-    private void OnResync(object? sender, EventArgs e) => _ = _controller?.ResyncAsync();
+    private void OnResync(object? sender, EventArgs e)
+    {
+        LogMenu("починить звук");
+        _ = _controller?.ResyncAsync();
+    }
 
-    private void OnShowNow(object? sender, EventArgs e) => _ = _controller?.ShowNowAsync();
+    private void OnShowNow(object? sender, EventArgs e)
+    {
+        LogMenu("что идёт сейчас");
+        _ = _controller?.ShowNowAsync();
+    }
 
-    private void OnToggleCall(object? sender, EventArgs e) => ToggleCallMute();
+    private void OnToggleCall(object? sender, EventArgs e)
+    {
+        LogMenu("без звука");
+        ToggleCallMute();
+    }
 
-    private void OnRestartChannel(object? sender, EventArgs e) => RestartChannel();
+    private void OnRestartChannel(object? sender, EventArgs e)
+    {
+        LogMenu("перезапустить канал");
+        RestartChannel();
+    }
 
-    private void OnRefreshLibrary(object? sender, EventArgs e) => _ = RefreshLibraryAsync();
+    private void OnRefreshLibrary(object? sender, EventArgs e)
+    {
+        LogMenu("обновить список сериалов");
+        _ = RefreshLibraryAsync();
+    }
 
     /// <summary>
     /// Обновить список сериалов ПО КОМАНДЕ пользователя и подхватить изменения «на лету»,
@@ -747,7 +803,11 @@ public partial class App : Application
         _settingsWindow.Activate();
     }
 
-    private void OnQuit(object? sender, EventArgs e) => _ = QuitAsync();
+    private void OnQuit(object? sender, EventArgs e)
+    {
+        AppLog.Write("МЕНЮ: выход");
+        _ = QuitAsync();
+    }
 
     private async Task QuitAsync()
     {
@@ -811,6 +871,7 @@ public partial class App : Application
 
     private void Cleanup()
     {
+        AppLog.Write("завершение: закрываю проигрыватель и освобождаю клавиши");
         _volumeSaveTimer?.Stop();
         _hotkeys?.Dispose();   // снимает RegisterHotKey
         if (_wndProcHook is not null && _hotkeyWindow is not null)
@@ -824,5 +885,7 @@ public partial class App : Application
             try { _instanceLock.ReleaseMutex(); } catch (ApplicationException) { }
             _instanceLock.Dispose();
         }
+
+        AppLog.Write("приложение закрыто");
     }
 }

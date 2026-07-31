@@ -56,18 +56,19 @@ public sealed class MpvIpcClient : IDisposable
     {
         var line = JsonSerializer.Serialize(new { command }, WireOptions);
 
-        await _connection.SendLineAsync(line, cancellationToken);
+        await _connection.SendLineAsync(line, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<T?> GetPropertyAsync<T>(string name, CancellationToken cancellationToken)
     {
         var requestId = _nextRequestId++;
         var request = new { command = new object[] { GetPropertyCommand, name }, request_id = requestId };
-        await _connection.SendLineAsync(JsonSerializer.Serialize(request, WireOptions), cancellationToken);
+        await _connection.SendLineAsync(JsonSerializer.Serialize(request, WireOptions), cancellationToken)
+            .ConfigureAwait(false);
 
         while (true)
         {
-            var reply = await _connection.ReadLineAsync(cancellationToken);
+            var reply = await _connection.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (reply is null)
                 throw new MpvIpcException($"Канал mpv закрылся без ответа на запрос '{name}'.");
 

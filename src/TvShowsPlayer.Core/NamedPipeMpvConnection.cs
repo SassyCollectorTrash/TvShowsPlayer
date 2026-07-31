@@ -35,19 +35,23 @@ public sealed class NamedPipeMpvConnection : IMpvConnection
         CancellationToken cancellationToken = default)
     {
         var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-        await pipe.ConnectAsync(timeoutMs, cancellationToken);
+
+        // ConfigureAwait(false) здесь обязателен: это библиотечный код, и продолжение
+        // не должно возвращаться в поток интерфейса. Иначе вызов из UI-потока
+        // (например, уборка «осиротевшего» плеера при старте) встаёт намертво.
+        await pipe.ConnectAsync(timeoutMs, cancellationToken).ConfigureAwait(false);
 
         return new NamedPipeMpvConnection(pipe);
     }
 
     public async Task SendLineAsync(string line, CancellationToken cancellationToken)
     {
-        await _writer.WriteLineAsync(line.AsMemory(), cancellationToken);
+        await _writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<string?> ReadLineAsync(CancellationToken cancellationToken)
     {
-        return await _reader.ReadLineAsync(cancellationToken);
+        return await _reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public void Dispose()
