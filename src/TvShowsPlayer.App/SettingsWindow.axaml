@@ -140,34 +140,38 @@
   <Grid RowDefinitions="*,Auto">
     <TabControl TabStripPlacement="Left" Grid.Row="0">
 
-      <TabItem Header="Пути">
+      <TabItem Header="Мультфильмы">
         <StackPanel Margin="28,24" MaxWidth="540" HorizontalAlignment="Left">
-          <TextBlock Classes="section" Text="Пути" />
-          <TextBlock Classes="label" Text="ПУТЬ К MPV.EXE" />
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBox Grid.Column="0" x:Name="MpvPathBox" Text="{Binding MpvPath, Mode=TwoWay}" />
-            <Button Grid.Column="1" Content="Обзор…" Click="OnBrowseMpv" Margin="8,0,0,0" />
-          </Grid>
+          <TextBlock Classes="section" Text="Мультфильмы" />
           <TextBlock Classes="label" Text="ПАПКА С МУЛЬТФИЛЬМАМИ" />
           <Grid ColumnDefinitions="*,Auto">
             <TextBox Grid.Column="0" x:Name="CartoonsRootBox" Text="{Binding CartoonsRoot, Mode=TwoWay}" />
-            <Button Grid.Column="1" Content="Обзор…" Click="OnBrowseCartoons" Margin="8,0,0,0" />
+            <Button Grid.Column="1" Content="Выбрать…" Click="OnBrowseCartoons" Margin="8,0,0,0" />
           </Grid>
-          <TextBlock Classes="label" Text="ПРОВЕРЯТЬ НОВЫЕ СЕРИАЛЫ, МИН (0 — НЕ ПРОВЕРЯТЬ)" />
-          <NumericUpDown Value="{Binding AutoRefreshMinutes, Mode=TwoWay}" Minimum="0" Maximum="720" Increment="5" />
-          <TextBlock Classes="label" Text="ЖДАТЬ ПОСЛЕ ЗАГРУЗКИ, МИН" />
-          <NumericUpDown Value="{Binding SettleMinutes, Mode=TwoWay}" Minimum="0" Maximum="240" Increment="5" />
-          <TextBlock Text="Серии, которые ещё качаются, в эфир не попадают: файл должен полежать без изменений."
+          <TextBlock Text="Внутри должна быть отдельная папка на каждый мультфильм, а в ней — файлы серий. Например: Мультфильмы \ Чип и Дейл \ Серия 01.mkv"
                      Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+
+          <TextBlock Classes="label" Text="КАК ЧАСТО ИСКАТЬ НОВЫЕ МУЛЬТФИЛЬМЫ, МИНУТ (0 — НЕ ИСКАТЬ)" />
+          <NumericUpDown Value="{Binding AutoRefreshMinutes, Mode=TwoWay}" Minimum="0" Maximum="720" Increment="5" />
+          <TextBlock Classes="label" Text="СКОЛЬКО ЖДАТЬ, ПОКА СЕРИЯ ДОКАЧАЕТСЯ, МИНУТ" />
+          <NumericUpDown Value="{Binding SettleMinutes, Mode=TwoWay}" Minimum="0" Maximum="240" Increment="5" />
+          <TextBlock Text="Пока серия скачивается, файл ещё меняется. Канал берёт её в эфир, только если файл пролежал без изменений указанное время — иначе можно попасть на недокачанную серию."
+                     Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+
+          <TextBlock Classes="label" Text="ПРОГРАММА ВОСПРОИЗВЕДЕНИЯ (ВХОДИТ В КОМПЛЕКТ — МЕНЯТЬ НЕ НУЖНО)" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" x:Name="MpvPathBox" Text="{Binding MpvPath, Mode=TwoWay}" />
+            <Button Grid.Column="1" Content="Выбрать…" Click="OnBrowseMpv" Margin="8,0,0,0" />
+          </Grid>
         </StackPanel>
       </TabItem>
 
-      <TabItem Header="Библиотека">
+      <TabItem Header="Проверка серий">
         <DockPanel Margin="28,24">
-          <TextBlock DockPanel.Dock="Top" Classes="section" Text="Как распознаны серии" />
+          <TextBlock DockPanel.Dock="Top" Classes="section" Text="Проверка серий" />
           <TextBlock DockPanel.Dock="Top" Foreground="#949ba4" FontSize="12" TextWrapping="Wrap"
                      Margin="0,0,0,10"
-                     Text="Проверь, если серии идут не в том порядке: здесь видно, по какой схеме определён номер серии и где сезон в имени файла спорит с папкой." />
+                     Text="Нажми «Проверить», если серии идут не по порядку. Программа покажет, как она поняла нумерацию каждого мультфильма, и предупредит, если номер сезона в названии файла не совпадает с папкой." />
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
             <Button Classes="accent" Content="Проверить" Click="OnInspectLibrary" />
             <TextBlock x:Name="LibraryStatus" Foreground="#949ba4" VerticalAlignment="Center" />
@@ -187,26 +191,30 @@
         </DockPanel>
       </TabItem>
 
-      <TabItem Header="Карусель">
-        <StackPanel Margin="28,24" MaxWidth="460" HorizontalAlignment="Left">
-          <TextBlock Classes="section" Text="Карусель" />
-          <TextBlock Classes="label" Text="ОКНО (СЕРИЙ В БЛОКЕ)" />
+      <TabItem Header="Порядок показа">
+        <StackPanel Margin="28,24" MaxWidth="520" HorizontalAlignment="Left">
+          <TextBlock Classes="section" Text="Порядок показа" />
+          <TextBlock Text="Канал показывает мультфильмы по очереди: несколько серий одного, потом несколько серий следующего. Когда очередь возвращается к первому, он продолжает почти с того же места — как повтор на телевидении."
+                     Foreground="#b5bac1" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,4" />
+          <TextBlock Classes="label" Text="СКОЛЬКО СЕРИЙ ПОДРЯД ОТ ОДНОГО МУЛЬТФИЛЬМА" />
           <NumericUpDown Value="{Binding Window, Mode=TwoWay}" Minimum="1" Maximum="20" Increment="1" />
-          <TextBlock Classes="label" Text="ШАГ (СДВИГ БЛОКА)" />
+          <TextBlock Classes="label" Text="НА СКОЛЬКО СЕРИЙ СДВИГАТЬСЯ В СЛЕДУЮЩИЙ РАЗ" />
           <NumericUpDown Value="{Binding Step, Mode=TwoWay}" Minimum="1" Maximum="20" Increment="1" />
-          <TextBlock Classes="label" Text="ПОТОЛОК РОТАЦИЙ" />
+          <TextBlock Text="Например: показываем по 4 серии, сдвиг 2 — значит в следующий раз две серии повторятся, а две будут новые."
+                     Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+          <TextBlock Classes="label" Text="ОГРАНИЧЕНИЕ ДЛИНЫ СПИСКА (ЕСЛИ НЕ УВЕРЕН — НЕ МЕНЯЙ)" />
           <NumericUpDown Value="{Binding CapRotations, Mode=TwoWay}" Minimum="1" Maximum="1000" Increment="10" />
         </StackPanel>
       </TabItem>
 
-      <TabItem Header="Плеер">
-        <StackPanel Margin="28,24" MaxWidth="460" HorizontalAlignment="Left">
-          <TextBlock Classes="section" Text="Плеер" />
+      <TabItem Header="Звук и экран">
+        <StackPanel Margin="28,24" MaxWidth="500" HorizontalAlignment="Left">
+          <TextBlock Classes="section" Text="Звук и экран" />
           <TextBlock Classes="label" Text="ГРОМКОСТЬ" />
           <NumericUpDown Value="{Binding Volume, Mode=TwoWay}" Minimum="0" Maximum="130" Increment="5" />
-          <TextBlock Classes="label" Text="ЭКРАН (fs-screen)" />
+          <TextBlock Classes="label" Text="НА КАКОМ ЭКРАНЕ ПОКАЗЫВАТЬ (0 — ОСНОВНОЙ, 1 — ВТОРОЙ)" />
           <NumericUpDown Value="{Binding FsScreen, Mode=TwoWay}" Minimum="0" Maximum="10" Increment="1" />
-          <TextBlock Classes="label" Text="АУДИО-УСТРОЙСТВО" />
+          <TextBlock Classes="label" Text="КУДА ВЫВОДИТЬ ЗВУК" />
           <ComboBox x:Name="AudioDeviceBox" HorizontalAlignment="Left" MinWidth="400"
                     SelectionChanged="OnAudioDeviceChanged">
             <ComboBox.ItemTemplate>
@@ -215,29 +223,30 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
-          <CheckBox x:Name="AutostartBox" Content="Запускать при входе в систему"
+          <CheckBox x:Name="AutostartBox" Content="Включать канал сразу после входа в Windows"
                     Click="OnAutostartToggled" Margin="0,20,0,0" />
-          <TextBlock Classes="label" Text="ГОРЯЧИЕ КЛАВИШИ" />
-          <CheckBox IsChecked="{Binding HotkeysEnabled, Mode=TwoWay}" Content="Включены" Margin="0,0,0,6" />
+          <TextBlock Classes="label" Text="УПРАВЛЕНИЕ С КЛАВИАТУРЫ" />
+          <CheckBox IsChecked="{Binding HotkeysEnabled, Mode=TwoWay}"
+                    Content="Управлять каналом с клавиатуры" Margin="0,0,0,6" />
           <ComboBox x:Name="HotkeyModifiersBox" HorizontalAlignment="Left" MinWidth="200"
                     SelectionChanged="OnHotkeyModifiersChanged" />
-          <TextBlock Text="Если комбинацию занимает другая программа — выбери другой набор. Применится после перезапуска приложения."
+          <TextBlock Text="Клавиши работают из любой программы: выбранные кнопки + Пробел — пауза, + стрелка вправо — следующая серия. Если такое сочетание уже занято другой программой, выбери другое. Сработает после перезапуска программы."
                      Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
         </StackPanel>
       </TabItem>
 
-      <TabItem Header="Плейлист">
+      <TabItem Header="Что в эфире">
         <Grid Margin="20,20" RowDefinitions="Auto,*,Auto" ColumnDefinitions="290,*">
 
-          <TextBlock Grid.Row="0" Grid.Column="0" Classes="section" Text="Порядок сериалов" />
-          <TextBlock Grid.Row="0" Grid.Column="1" Classes="section" Text="Серии" Margin="16,0,0,0" />
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="section" Text="Мультфильмы" />
+          <TextBlock Grid.Row="0" Grid.Column="1" Classes="section" Text="Эфир" Margin="16,0,0,0" />
 
           <DockPanel Grid.Row="1" Grid.Column="0">
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
               <Button Content="↑" Click="OnMoveUp" Width="42" />
               <Button Content="↓" Click="OnMoveDown" Width="42" />
-              <TextBlock Text="галочка = в канале" Foreground="#949ba4"
-                         VerticalAlignment="Center" FontSize="12" />
+              <TextBlock Text="перетаскивай мышью; галочка — идёт в эфире" Foreground="#949ba4"
+                         VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
             <ListBox x:Name="ShowsList" Background="#2b2d31">
               <ListBox.ItemTemplate>
@@ -266,8 +275,8 @@
                            FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </Border>
-            <TextBlock DockPanel.Dock="Top" Text="Далее (двойной клик — перейти)" Foreground="#b5bac1"
-                       FontSize="12" FontWeight="Bold" Margin="2,0,0,6" />
+            <TextBlock DockPanel.Dock="Top" Text="ДАЛЬШЕ ПО ОЧЕРЕДИ (ДВОЙНОЙ ЩЕЛЧОК — ПЕРЕЙТИ К СЕРИИ)"
+                       Foreground="#b5bac1" FontSize="12" FontWeight="Bold" Margin="2,0,0,6" />
             <ListBox x:Name="QueueList" Background="#2b2d31" FontSize="13" DoubleTapped="OnQueueJump">
               <ListBox.ItemTemplate>
                 <DataTemplate>
@@ -280,8 +289,8 @@
           <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Background="#2b2d31"
                   CornerRadius="4" Padding="12,10" Margin="0,12,0,0">
             <StackPanel Orientation="Horizontal" Spacing="14">
-              <Button Classes="accent" Content="Пересобрать" Click="OnRebuild" />
-              <CheckBox x:Name="PreserveCurrent" Content="остаться на текущей серии"
+              <Button Classes="accent" Content="Применить к эфиру" Click="OnRebuild" />
+              <CheckBox x:Name="PreserveCurrent" Content="не прерывать серию, которая идёт"
                         IsChecked="True" VerticalAlignment="Center" />
               <TextBlock x:Name="PlaylistStatus" Foreground="#949ba4" VerticalAlignment="Center"
                          TextTrimming="CharacterEllipsis" />
@@ -290,19 +299,23 @@
         </Grid>
       </TabItem>
 
-      <TabItem Header="OSD">
-        <StackPanel Margin="28,24" MaxWidth="460" HorizontalAlignment="Left">
-          <TextBlock Classes="section" Text="OSD" />
-          <TextBlock Classes="label" Text="ИМЯ КАНАЛА" />
+      <TabItem Header="Надписи на экране">
+        <StackPanel Margin="28,24" MaxWidth="500" HorizontalAlignment="Left">
+          <TextBlock Classes="section" Text="Надписи на экране" />
+          <TextBlock Text="Всё, что канал рисует поверх мультфильма. 0 секунд — не показывать вовсе."
+                     Foreground="#b5bac1" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,4" />
+          <TextBlock Classes="label" Text="НАЗВАНИЕ КАНАЛА НА ЗАСТАВКЕ" />
           <TextBox Text="{Binding ChannelName, Mode=TwoWay}" />
-          <TextBlock Classes="label" Text="ЗАСТАВКА, СЕК" />
+          <TextBlock Classes="label" Text="ЗАСТАВКА ПРИ ВКЛЮЧЕНИИ, СЕКУНД" />
           <NumericUpDown Value="{Binding SplashSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
-          <TextBlock Classes="label" Text="БАМПЕР «ДАЛЕЕ», СЕК" />
+          <TextBlock Classes="label" Text="НАДПИСЬ «ДАЛЕЕ» ПРИ СМЕНЕ МУЛЬТФИЛЬМА, СЕКУНД" />
           <NumericUpDown Value="{Binding BumperSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
-          <TextBlock Classes="label" Text="ПЛАШКА СЕРИИ, СЕК" />
+          <TextBlock Classes="label" Text="ПОДПИСЬ СЕРИИ ВНИЗУ ЭКРАНА, СЕКУНД" />
           <NumericUpDown Value="{Binding PlashkaSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
-          <CheckBox IsChecked="{Binding ClockEnabled, Mode=TwoWay}" Content="Часы в углу" />
-          <CheckBox IsChecked="{Binding RetroTheme, Mode=TwoWay}" Content="Ретро-тема" />
+          <CheckBox IsChecked="{Binding ClockEnabled, Mode=TwoWay}" Content="Показывать часы в углу" />
+          <CheckBox IsChecked="{Binding RetroTheme, Mode=TwoWay}" Content="Ретро-стиль надписей (тёплый жёлтый)" />
+          <TextBlock Text="Изменения появятся после «Перезапустить канал» в меню значка у часов."
+                     Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,10,0,0" />
         </StackPanel>
       </TabItem>
 

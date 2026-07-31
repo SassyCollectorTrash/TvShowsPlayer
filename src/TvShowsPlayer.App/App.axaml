@@ -6,21 +6,21 @@
   </Application.Styles>
   <TrayIcon.Icons>
     <TrayIcons>
-      <TrayIcon Icon="/Assets/icon.png" ToolTipText="LocalTV — мультканал" IsVisible="False">
+      <TrayIcon Icon="/Assets/icon.png" ToolTipText="LocalTV — канал с мультфильмами" IsVisible="False">
         <TrayIcon.Menu>
           <NativeMenu>
-            <NativeMenuItem Header="Пауза / Пуск" Click="OnPausePlay" />
+            <NativeMenuItem Header="Пауза / продолжить" Click="OnPausePlay" />
             <NativeMenuItem Header="Громче" Click="OnVolumeUp" />
             <NativeMenuItem Header="Тише" Click="OnVolumeDown" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Следующая серия" Click="OnNextEpisode" />
-            <NativeMenuItem Header="Следующий сериал" Click="OnNextShow" />
-            <NativeMenuItem Header="Пересинхронизировать звук" Click="OnResync" />
-            <NativeMenuItem Header="Что идёт сейчас" Click="OnShowNow" />
+            <NativeMenuItem Header="Следующий мультфильм" Click="OnNextShow" />
+            <NativeMenuItem Header="Показать, что идёт сейчас" Click="OnShowNow" />
+            <NativeMenuItem Header="Починить звук (если отстаёт от картинки)" Click="OnResync" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Режим созвона (мьют)" ToggleType="CheckBox" Click="OnToggleCall" />
+            <NativeMenuItem Header="Тишина (на время звонка)" ToggleType="CheckBox" Click="OnToggleCall" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Обновить библиотеку" Click="OnRefreshLibrary" />
+            <NativeMenuItem Header="Поискать новые мультфильмы" Click="OnRefreshLibrary" />
             <NativeMenuItem Header="Перезапустить канал" Click="OnRestartChannel" />
             <NativeMenuItem Header="Настройки…" Click="OnSettings" />
             <NativeMenuItemSeparator />

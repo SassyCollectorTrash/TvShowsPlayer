@@ -122,7 +122,7 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            _libraryStatus.Text = "Читаю библиотеку…";
+            _libraryStatus.Text = "Смотрю, что в папке…";
             var root = _config.CartoonsRoot;
 
             var reports = await Task.Run(() =>
@@ -147,12 +147,12 @@ public partial class SettingsWindow : Window
             }).ToList();
 
             _libraryStatus.Text = reports.Count == 0
-                ? "Сериалы не найдены — проверь папку на вкладке «Пути»."
-                : $"Сериалов: {reports.Count}, серий: {reports.Sum(r => r.EpisodeCount)}.";
+                ? "Мультфильмы не найдены — проверь папку на вкладке «Мультфильмы»."
+                : $"Найдено мультфильмов: {reports.Count}, серий: {reports.Sum(r => r.EpisodeCount)}.";
         }
         catch (Exception ex)
         {
-            _libraryStatus.Text = $"Не удалось прочитать: {ex.Message}";
+            _libraryStatus.Text = $"Не удалось прочитать папку: {ex.Message}";
         }
     }
 
@@ -195,28 +195,28 @@ public partial class SettingsWindow : Window
             if (info is null)
             {
                 if (!silent)
-                    _status.Text = "Не удалось проверить обновления";
+                    _status.Text = "Не получилось проверить обновления — нет связи с интернетом?";
                 return;
             }
 
             if (UpdateChecker.HasUpdate(AppVersion, info))
             {
                 _releaseUrl = info.ReleaseUrl ?? Branding.ReleasesUrl;
-                _updateButton.Content = $"Скачать обновление v{info.Version.ToString(3)}";
+                _updateButton.Content = $"Скачать версию {info.Version.ToString(3)}";
                 _updateButton.IsVisible = true;
-                _status.Text = $"Доступна новая версия v{info.Version.ToString(3)}";
+                _status.Text = $"Вышла новая версия {info.Version.ToString(3)} — можно скачать";
             }
             else
             {
                 _updateButton.IsVisible = false;
                 if (!silent)
-                    _status.Text = "Установлена последняя версия";
+                    _status.Text = "У тебя самая свежая версия";
             }
         }
         catch
         {
             if (!silent)
-                _status.Text = "Не удалось проверить обновления";
+                _status.Text = "Не получилось проверить обновления — нет связи с интернетом?";
         }
         finally
         {
@@ -368,7 +368,7 @@ public partial class SettingsWindow : Window
         {
             if (_controller is null)
             {
-                _nowPlaying.Text = "(нет связи с mpv)";
+                _nowPlaying.Text = "Канал сейчас не идёт";
                 return;
             }
 
@@ -408,7 +408,7 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            _playlistStatus.Text = $"Ошибка перехода: {ex.Message}";
+            _playlistStatus.Text = $"Не удалось перейти к серии: {ex.Message}";
         }
     }
 
@@ -459,12 +459,12 @@ public partial class SettingsWindow : Window
                 await _controller.SetPlaylistPosAsync(pos);
             }
 
-            _playlistStatus.Text = $"Пересобрано: {result.ShowCount} сериалов, {result.PlaylistLength} записей · указатель → {pos}.";
+            _playlistStatus.Text = $"Готово: в эфире {result.ShowCount} мультфильмов, {result.PlaylistLength} серий в очереди.";
             await RefreshNowAndNext();
         }
         catch (Exception ex)
         {
-            _playlistStatus.Text = $"Ошибка пересборки: {ex.Message}";
+            _playlistStatus.Text = $"Не удалось применить: {ex.Message}";
         }
     }
 
@@ -564,7 +564,7 @@ public partial class SettingsWindow : Window
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Выбери mpv.exe",
+            Title = "Выбери программу воспроизведения (mpv.exe)",
             AllowMultiple = false,
             FileTypeFilter = new[] { new FilePickerFileType("Программа") { Patterns = new[] { "*.exe" } } },
         });
@@ -604,14 +604,15 @@ public partial class SettingsWindow : Window
 
         _status.Text = _controller is null
             ? "Сохранено. Теперь нажми «Запустить канал»."
-            : $"Сохранено · {DateTime.Now:HH:mm:ss}. Аудио, экран и OSD применятся после «Перезапустить канал» в трее.";
+            : $"Сохранено в {DateTime.Now:HH:mm}. Звук, экран и надписи изменятся после «Перезапустить канал» " +
+              "в меню значка у часов.";
     }
 
     private void OnStartChannel(object? sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(_config.CartoonsRoot) || !Directory.Exists(_config.CartoonsRoot))
         {
-            _status.Text = "Сначала укажи папку с мультфильмами на вкладке «Пути».";
+            _status.Text = "Сначала выбери папку с мультфильмами на вкладке «Мультфильмы».";
             return;
         }
 
