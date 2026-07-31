@@ -38,7 +38,11 @@ public static class ChannelBuilder
     {
         var shows = ShowOrdering.Apply(
             ShowScanner.Scan(options.Root, options.ExcludedShows), options.ShowOrder);
-        var signature = CompositionSignature.Compute(shows);
+
+        // В сигнатуру входят и параметры карусели: иначе смена «окна»/«шага» в
+        // настройках не пересобирала бы плейлист при перезапуске.
+        var signature = CompositionSignature.Compute(
+            shows, options.Window, options.Step, options.CapRotations);
 
         if (!options.Force && PlaylistWriter.IsUpToDate(options.PlaylistPath, signature))
             return new ChannelBuildResult { Rebuilt = false, ShowCount = shows.Count };

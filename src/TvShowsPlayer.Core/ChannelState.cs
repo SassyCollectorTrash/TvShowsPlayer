@@ -31,10 +31,23 @@ public sealed class ChannelState
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    /// <summary>Резервная копия предыдущего состояния (страховка от обрыва записи).</summary>
+    public static string BackupPath(string path) => path + ".bak";
+
+    /// <summary>
+    /// Прочитать состояние. Если основной файл повреждён (обрыв записи, выключение
+    /// питания), поднимаем прогресс из резервной копии — молча начинать с нуля нельзя,
+    /// иначе следующая же запись затрёт накопленный прогресс просмотра.
+    /// </summary>
     public static ChannelState Load(string path)
     {
+        return TryLoad(path) ?? TryLoad(BackupPath(path)) ?? new ChannelState();
+    }
+
+    private static ChannelState? TryLoad(string path)
+    {
         if (!File.Exists(path))
-            return new ChannelState();
+            return null;
 
         try
         {
@@ -58,19 +71,41 @@ public sealed class ChannelState
 
             return state;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            return new ChannelState();
+            return null;   // битый или недоступный — пусть решает вызывающий (есть .bak)
         }
     }
 
+    /// <summary>
+    /// Записать состояние атомарно: сначала во временный файл, затем подменой поверх
+    /// основного с сохранением предыдущей версии в <c>.bak</c>. Так обрыв записи не
+    /// оставляет усечённый файл — прогресс просмотра переживает падение и выключение.
+    /// </summary>
     public void Save(string path)
     {
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        File.WriteAllText(path, JsonSerializer.Serialize(this, WriteOptions));
+        var json = JsonSerializer.Serialize(this, WriteOptions);
+        var tmp = path + ".tmp";
+        File.WriteAllText(tmp, json);
+
+        if (!File.Exists(path))
+        {
+            File.Move(tmp, path);
+            return;
+        }
+
+        try
+        {
+            File.Replace(tmp, path, BackupPath(path), ignoreMetadataErrors: true);
+        }
+        catch (IOException)
+        {
+            File.Move(tmp, path, overwrite: true);   // файл был занят — хотя бы не теряем запись
+        }
     }
 
     private static int GetInt(JsonElement root, string name) =>

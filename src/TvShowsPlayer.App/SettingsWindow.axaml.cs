@@ -78,7 +78,7 @@ public partial class SettingsWindow : Window
         _versionText.Text = $"{Branding.AppName} v{AppVersion.ToString(3)}";
         Closed += (_, _) => _closing.Cancel();   // не дописываем в контролы закрытого окна
 
-        PopulateAudioDevices();
+        _ = PopulateAudioDevicesAsync();
         PopulateShows();
         SetupDragDrop();
         SetupAutoRefresh();
@@ -353,7 +353,12 @@ public partial class SettingsWindow : Window
     {
         try
         {
+            // Пересборка меняет канал — значит и конфиг должен лечь на диск, иначе
+            // следующий запуск соберёт по старому порядку и канал «прыгнет».
             ApplyShowConfig();
+            if (!string.IsNullOrEmpty(_configPath))
+                _config.Save(_configPath);
+
             var dir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
             var playlistPath = Path.Combine(dir, "channel.m3u");
             var statePath = ChannelPaths.ResolveStatePath(dir);
@@ -399,6 +404,11 @@ public partial class SettingsWindow : Window
         }
     }
 
+    // Плейлист канала — тысячи строк; фоновое обновление идёт раз в 2 секунды,
+    // поэтому перечитываем файл только когда он реально изменился.
+    private List<string> _playlistCache = new();
+    private DateTime _playlistStamp = DateTime.MinValue;
+
     private List<string> ReadDevPlaylist()
     {
         var dir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
@@ -406,9 +416,16 @@ public partial class SettingsWindow : Window
         if (!File.Exists(m3u))
             return new List<string>();
 
-        return File.ReadAllLines(m3u)
+        var stamp = File.GetLastWriteTimeUtc(m3u);
+        if (stamp == _playlistStamp)
+            return _playlistCache;
+
+        _playlistCache = File.ReadAllLines(m3u)
             .Where(l => l.Length > 0 && !l.StartsWith('#'))
             .ToList();
+        _playlistStamp = stamp;
+
+        return _playlistCache;
     }
 
     // Полный путь → (сериал, rel относительно папки сериала) под корнем библиотеки.
@@ -434,9 +451,15 @@ public partial class SettingsWindow : Window
     }
 
     // ---- аудио-устройства ----
-    private void PopulateAudioDevices()
+    // Список устройств добывается запуском mpv — делаем это в фоне, иначе окно
+    // настроек «подвисает» на открытии, пока mpv перечисляет звуковые выходы.
+    private async Task PopulateAudioDevicesAsync()
     {
-        var devices = QueryAudioDevices(_config.MpvPath);
+        var mpvPath = _config.MpvPath;
+        var devices = await Task.Run(() => QueryAudioDevices(mpvPath));
+        if (_closing.IsCancellationRequested)
+            return;
+
         _audioBox.ItemsSource = devices;
         _audioBox.SelectedItem = devices.FirstOrDefault(d => d.Id == _config.AudioDevice)
                                  ?? devices.FirstOrDefault(d => d.Id == "auto");

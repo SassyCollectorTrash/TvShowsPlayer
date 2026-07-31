@@ -9,12 +9,29 @@
 local mp = require 'mp'
 local msg = require 'mp.msg'
 
+-- Настройки приезжают из приложения (--script-opts-append=channelosd-*), значения
+-- ниже — дефолты на случай запуска mpv напрямую.
+local function opt_num(name, default)
+    return tonumber(mp.get_opt(name)) or default
+end
+
+local function opt_bool(name, default)
+    local v = mp.get_opt(name)
+    if v == nil then return default end
+    return v == "yes" or v == "true" or v == "1"
+end
+
 local CHANNEL = mp.get_opt("channelosd-name") or "LocalTV"   -- имя канала из настроек
-local SPLASH_SEC = 4.0      -- длительность заставки-прогрева
-local BUMPER_SEC = 3.0      -- длительность бампера «ДАЛЕЕ»
-local PLASHKA_SEC = 5.0     -- длительность плашки серии
+local SPLASH_SEC = opt_num("channelosd-splash", 4.0)     -- длительность заставки-прогрева
+local BUMPER_SEC = opt_num("channelosd-bumper", 3.0)     -- длительность бампера «ДАЛЕЕ»
+local PLASHKA_SEC = opt_num("channelosd-plashka", 5.0)   -- длительность плашки серии
+local CLOCK_ON = opt_bool("channelosd-clock", true)      -- часы в углу
+local RETRO = opt_bool("channelosd-retro", false)        -- ретро-тема (тёплый янтарь)
 local NOW_SEC = 6.0         -- длительность плашки «сейчас идёт» (по хоткею/трею)
 local STARTUP_GRACE = 2.0   -- окно после старта, где показываем только заставку
+
+-- Палитра: ретро-тема красит акценты в янтарный, обычная — голубой «эфирный».
+local ACCENT = RETRO and "&H00A5FF&" or "&H00CCFF&"
 
 local root = mp.get_opt("channelosd-root") or ""
 
@@ -81,6 +98,12 @@ end
 
 -- ---------- часы ----------
 local function update_clock()
+    if not CLOCK_ON then
+        clock_ov.data = ""
+        clock_ov:update()
+        return
+    end
+
     local w, h = prep(clock_ov)
     clock_ov.data = string.format(
         "{\\an9\\pos(%d,%d)\\fs%d\\b1\\bord2\\3c&H000000&\\1c&HFFFFFF&\\alpha&H20&}%s",
@@ -120,8 +143,8 @@ local function show_bumper(show)
     local cx = math.floor(w / 2)
     local lines = {
         dim_rect(w, h, 0x88),
-        string.format("{\\an5\\pos(%d,%d)\\fs%d\\b1\\bord2\\3c&H000000&\\1c&H00CCFF&}%s",
-            cx, math.floor(h * 0.40), fs(h, 0.055), "ДАЛЕЕ"),
+        string.format("{\\an5\\pos(%d,%d)\\fs%d\\b1\\bord2\\3c&H000000&\\1c%s}%s",
+            cx, math.floor(h * 0.40), fs(h, 0.055), ACCENT, "ДАЛЕЕ"),
         string.format("{\\an5\\pos(%d,%d)\\fs%d\\b1\\bord3\\3c&H000000&\\1c&HFFFFFF&}%s",
             cx, math.floor(h * 0.52), fs(h, 0.10), show),
     }
@@ -156,8 +179,8 @@ local function show_now()
     local w, h = prep(now_ov)
     local cx = math.floor(w / 2)
     local lines = {
-        string.format("{\\an2\\pos(%d,%d)\\fs%d\\b1\\bord2\\3c&H000000&\\1c&H00CCFF&}%s",
-            cx, math.floor(h * 0.88), fs(h, 0.035), "СЕЙЧАС В ЭФИРЕ"),
+        string.format("{\\an2\\pos(%d,%d)\\fs%d\\b1\\bord2\\3c&H000000&\\1c%s}%s",
+            cx, math.floor(h * 0.88), fs(h, 0.035), ACCENT, "СЕЙЧАС В ЭФИРЕ"),
         string.format("{\\an2\\pos(%d,%d)\\fs%d\\b1\\bord3\\3c&H000000&\\1c&HFFFFFF&}%s",
             cx, math.floor(h * 0.97), fs(h, 0.06), text),
     }
@@ -223,7 +246,9 @@ end
 -- Сторож рассинхрона: следим за avsync; если звук заметно «уплыл» от картинки —
 -- пишем короткую строку в лог И сами пересинхронизируем (самолечение 24/7-канала).
 -- Лог маленький: пишется только при реальном уплытии, не постоянно.
-local DESYNC_LOG = (os.getenv("APPDATA") or ".") .. "/localtv-desync.log"
+-- Лог рядом с конфигом (~~/ = config-dir), а НЕ в %APPDATA%: тот путь в песочнице
+-- приложения резолвится в другую папку — по этой причине уже терялась закладка.
+local DESYNC_LOG = (mp.command_native({ "expand-path", "~~/" }) or ".") .. "/localtv-desync.log"
 local DESYNC_THRESH = 0.5    -- секунд: порог «звук уплыл»
 local resync_after = 0       -- авто-пересинхрон не чаще раза в минуту
 

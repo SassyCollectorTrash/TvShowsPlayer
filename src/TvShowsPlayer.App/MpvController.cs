@@ -86,15 +86,35 @@ public sealed class MpvController : IDisposable
     public Task ReloadPlaylistAsync(string m3uPath, CancellationToken cancellationToken = default) =>
         SendAsync(new object[] { "loadlist", m3uPath, "replace" }, cancellationToken);
 
+    // Любая операция ограничена по времени: без этого один «повисший» запрос держал
+    // бы семафор вечно, и весь пульт (включая «Выход») переставал бы отвечать.
+    private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(5);
+
     private async Task<T?> GetAsync<T>(string property, CancellationToken cancellationToken)
     {
-        if (_client is null)
+        var client = _client;
+        if (client is null)
             return default;
 
-        await _gate.WaitAsync(cancellationToken);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(OperationTimeout);
+
         try
         {
-            return await _client.GetPropertyAsync<T>(property, cancellationToken);
+            await _gate.WaitAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return default;
+        }
+
+        try
+        {
+            return await client.GetPropertyAsync<T>(property, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return default;
         }
         finally
         {
@@ -104,13 +124,29 @@ public sealed class MpvController : IDisposable
 
     private async Task SendAsync(IReadOnlyList<object> command, CancellationToken cancellationToken)
     {
-        if (_client is null)
+        var client = _client;
+        if (client is null)
             return;
 
-        await _gate.WaitAsync(cancellationToken);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(OperationTimeout);
+
         try
         {
-            await _client.SendCommandAsync(command, cancellationToken);
+            await _gate.WaitAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        try
+        {
+            await client.SendCommandAsync(command, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // mpv не ответил вовремя — команда пропущена, приложение живёт дальше
         }
         finally
         {

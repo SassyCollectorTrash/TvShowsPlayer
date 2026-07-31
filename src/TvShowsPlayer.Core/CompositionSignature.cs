@@ -11,7 +11,16 @@ namespace TvShowsPlayer.Core;
 /// </summary>
 public static class CompositionSignature
 {
-    public static string Compute(IReadOnlyList<Show> shows)
+    /// <param name="window">Параметры карусели входят в сигнатуру: их смена меняет
+    /// сам плейлист, значит требует пересборки (иначе настройка «не работает»).</param>
+    public static string Compute(IReadOnlyList<Show> shows, int window, int step, int capRotations)
+    {
+        return Compute(shows, $"|w={window},s={step},c={capRotations}");
+    }
+
+    public static string Compute(IReadOnlyList<Show> shows) => Compute(shows, suffix: null);
+
+    private static string Compute(IReadOnlyList<Show> shows, string? suffix)
     {
         using var ms = new MemoryStream();
 
@@ -26,6 +35,9 @@ public static class CompositionSignature
 
             ms.WriteByte((byte)'\n');
         }
+
+        if (suffix is not null)
+            WriteUtf8(ms, suffix);
 
         var hash = SHA1.HashData(ms.ToArray());
         return Convert.ToHexString(hash).ToLowerInvariant();

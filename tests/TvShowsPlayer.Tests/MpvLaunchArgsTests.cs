@@ -57,7 +57,7 @@ public class MpvLaunchArgsTests
 
         var args = MpvLaunchArgs.Build(options);
 
-        args.Should().Contain(@"--script-opts=channelosd-root=C:\Cartoons");
+        args.Should().Contain(@"--script-opts-append=channelosd-root=C:\Cartoons");
     }
 
     [Fact]
@@ -75,28 +75,28 @@ public class MpvLaunchArgsTests
 
         var args = MpvLaunchArgs.Build(options);
 
-        args.Should().Contain("--script-opts=channelosd-name=Дом ТВ");
+        args.Should().Contain("--script-opts-append=channelosd-name=Дом ТВ");
     }
 
     [Fact]
-    public void Build_WithRootAndName_CombinesThemIntoOneScriptOpts()
+    public void Build_WithRootAndName_PassesEachAsSeparateOption()
     {
         var options = DevOptions() with { ChannelOsdRoot = @"C:\Cartoons", ChannelName = "LocalTV" };
 
         var args = MpvLaunchArgs.Build(options);
 
-        args.Should().ContainSingle(a => a.StartsWith("--script-opts="))
-            .Which.Should().Be(@"--script-opts=channelosd-root=C:\Cartoons,channelosd-name=LocalTV");
+        args.Should().Contain(@"--script-opts-append=channelosd-root=C:\Cartoons");
+        args.Should().Contain("--script-opts-append=channelosd-name=LocalTV");
     }
 
     [Fact]
-    public void Build_ChannelNameWithComma_StripsIt_SoScriptOptsStayParseable()
+    public void Build_ChannelNameWithComma_KeepsItIntact()
     {
-        // запятая — разделитель пар в --script-opts, иначе mpv разберёт имя как опцию
+        // отдельный --script-opts-append на опцию → запятая внутри значения безопасна
         var options = DevOptions() with { ChannelName = "Дом, милый дом" };
 
         var args = MpvLaunchArgs.Build(options);
 
-        args.Should().Contain("--script-opts=channelosd-name=Дом милый дом");
+        args.Should().Contain("--script-opts-append=channelosd-name=Дом, милый дом");
     }
 }

@@ -136,7 +136,11 @@ internal sealed class NaturalKey : IComparable<NaturalKey>
         for (var i = 0; i < parts.Length; i++)
         {
             var p = parts[i];
-            segs[i] = p.Length > 0 && IsAllDigits(p) ? long.Parse(p) : p.ToLowerInvariant();
+            // Числа длиннее long (мусорные ID в именах релизов) сравниваем как текст —
+            // иначе скан всей библиотеки падал бы из-за одного файла.
+            segs[i] = p.Length > 0 && IsAllDigits(p) && long.TryParse(p, out var number)
+                ? number
+                : p.ToLowerInvariant();
         }
 
         return new NaturalKey(segs);

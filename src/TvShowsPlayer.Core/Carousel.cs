@@ -48,7 +48,7 @@ public static class Carousel
         for (var i = 0; i < shows.Count; i++)
         {
             // короткие сериалы всегда играют целиком и заканчивают на 0 → старт 0
-            var seed = startCursors is not null && shows[i].Episodes.Count > window
+            var seed = startCursors is not null && i < startCursors.Count && shows[i].Episodes.Count > window
                 ? startCursors[i]
                 : 0;
             cursors[i] = seed;

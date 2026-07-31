@@ -66,7 +66,10 @@ end
 -- Подхватываем уже накопленный прогресс (каноничный файл, иначе со старым именем
 -- рядом), чтобы НЕ затереть позиции сериалов, которые в этом сеансе ещё не игрались.
 local function load_progress()
-    local s = read_json_file(state_file) or read_json_file(legacy_state)
+    -- каноничный → .bak (если основной обрезан) → файл со старым именем
+    local s = read_json_file(state_file)
+        or read_json_file(state_file .. ".bak")
+        or read_json_file(legacy_state)
     if s and type(s.shows) == "table" then
         progress = s.shows
     end
@@ -97,17 +100,31 @@ local function record_progress()
     end
 end
 
+-- Запись АТОМАРНАЯ: сначала полностью во временный файл, затем подменяем основной,
+-- сохраняя предыдущую версию в .bak. Прямая запись усекала файл в самом начале —
+-- обрыв (выключение питания, чтение приложением в этот момент) означал потерю
+-- всего прогресса просмотра.
 local function save_state()
     local pos = mp.get_property_number("playlist-pos", -1)
     if not pos or pos < 0 then return end
     local t = mp.get_property_number("time-pos", 0) or 0   -- сохраняем на будущее
-    local f = io.open(state_file, "w")
+
+    local tmp_file = state_file .. ".tmp"
+    local f = io.open(tmp_file, "w")
     if not f then
-        rlog("save FAILED: не открыть для записи " .. state_file)
+        rlog("save FAILED: не открыть для записи " .. tmp_file)
         return
     end
     f:write(utils.format_json({ playlist_pos = pos, time_pos = t, shows = progress, current = current_show }))
     f:close()
+
+    os.remove(state_file .. ".bak")
+    os.rename(state_file, state_file .. ".bak")   -- прежняя версия остаётся страховкой
+    local ok, err = os.rename(tmp_file, state_file)
+    if not ok then
+        rlog("save FAILED: не переименовать " .. tmp_file .. " -> " .. tostring(err))
+        return
+    end
     if pos ~= last_logged then
         rlog("save pos=" .. pos)
         last_logged = pos
@@ -120,9 +137,13 @@ local function restore_state()
 
     local count = mp.get_property_number("playlist-count", 0) or 0
 
-    -- читаем каноничный файл; если его ещё нет — файл со старым именем в той же папке
+    -- каноничный → .bak (страховка от обрыва записи) → файл со старым именем
     local src = state_file
     local f = io.open(state_file, "r")
+    if not f then
+        f = io.open(state_file .. ".bak", "r")
+        src = state_file .. ".bak"
+    end
     if not f then
         f = io.open(legacy_state, "r")
         src = legacy_state

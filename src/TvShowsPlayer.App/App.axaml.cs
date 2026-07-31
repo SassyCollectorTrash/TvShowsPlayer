@@ -55,7 +55,18 @@ public partial class App : Application
 
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             desktop.Exit += (_, _) => Cleanup();
-            StartChannel();
+
+            // Сбой запуска раньше был невидим (процесс просто исчезал). Теперь —
+            // понятное сообщение и запись в журнал рядом с конфигом.
+            try
+            {
+                StartChannel();
+            }
+            catch (Exception ex)
+            {
+                AppLog.ShowError($"Не удалось запустить канал.\n\n{ex.Message}\n\nПроверь «Настройки → Пути»: папку с мультфильмами и mpv.exe.");
+                Shutdown();
+            }
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -103,6 +114,9 @@ public partial class App : Application
         {
             configDir = Path.Combine(appDir, "dev-config");
         }
+        AppLog.UseDirectory(configDir);
+        AppLog.Write($"старт: режим={_mode}, config-dir={configDir}");
+
         _configPath = Path.Combine(configDir, "appconfig.json");
         var config = AppConfig.Load(_configPath);
         ResolveMpvPath(config, appDir);   // бандл-mpv, если путь в конфиге не существует
@@ -136,6 +150,11 @@ public partial class App : Application
             PipePath = $@"\\.\pipe\{pipeName}",
             ChannelOsdRoot = config.CartoonsRoot,   // имя сериала для next-show / «сейчас»
             ChannelName = config.ChannelName,       // имя канала на заставке
+            SplashSeconds = config.SplashSeconds,
+            BumperSeconds = config.BumperSeconds,
+            PlashkaSeconds = config.PlashkaSeconds,
+            ClockEnabled = config.ClockEnabled,
+            RetroTheme = config.RetroTheme,
             Fullscreen = isProd,
         };
 
@@ -150,7 +169,7 @@ public partial class App : Application
         }
 
         _controller = new MpvController(pipeName);
-        _ = _controller.ConnectAsync();   // фоновое подключение к pipe (с ретраем)
+        _ = ConnectControllerAsync(_controller);   // фоновое подключение к pipe (с ретраем)
 
         // Иконка трея берётся из mpv.exe (динамическая) → ставим после загрузки XAML,
         // затем делаем видимой, чтобы нативная иконка создалась уже с картинкой.
@@ -167,6 +186,23 @@ public partial class App : Application
         }
 
         StartHotkeys();
+    }
+
+    // Подключение к mpv фоном: провал больше не теряется молча (иначе трей и хоткеи
+    // просто ничего не делают, и понять причину нельзя).
+    private static async Task ConnectControllerAsync(MpvController controller)
+    {
+        try
+        {
+            await controller.ConnectAsync();
+            AppLog.Write(controller.IsConnected
+                ? "IPC: подключились к mpv"
+                : "IPC: подключиться не удалось — трей и хоткеи работать не будут");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"IPC: подключиться не удалось ({ex.Message}) — трей и хоткеи работать не будут");
+        }
     }
 
     // Скрытое окно (1×1, off-screen) — даёт HWND для RegisterHotKey и приёма WM_HOTKEY.
@@ -195,8 +231,14 @@ public partial class App : Application
 
         // Dev = Ctrl+Alt+Shift+… (сосуществование с живым AHK), Prod = боевые комбо.
         var hotkeyMode = _mode == ChannelMode.Production ? HotkeyMode.Production : HotkeyMode.Dev;
-        _hotkeys = new GlobalHotkeys(hwnd, Hotkeys.ForMode(hotkeyMode), OnHotkey);
+        var bindings = Hotkeys.ForMode(hotkeyMode);
+        _hotkeys = new GlobalHotkeys(hwnd, bindings, OnHotkey);
         _hotkeys.Register();
+
+        // Комбо мог занять другой программой — молчать об этом нельзя, иначе
+        // «клавиши не работают» без единой подсказки.
+        if (_hotkeys.RegisteredCount < bindings.Count)
+            AppLog.Write($"хоткеи: занято другими программами {bindings.Count - _hotkeys.RegisteredCount} из {bindings.Count}");
     }
 
     private IntPtr OnWndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -260,7 +302,17 @@ public partial class App : Application
         {
             var source = Path.Combine(bundled, name);
             if (File.Exists(source))
+            {
                 File.Copy(source, Path.Combine(scriptsDir, name), overwrite: true);
+                continue;
+            }
+
+            // Без resume.lua канал молча перестаёт запоминать место просмотра —
+            // это как раз тот случай, о котором нужно сказать вслух.
+            if (name == ChannelScripts.Resume)
+                AppLog.ShowWarning($"Рядом с программой нет файла scripts\\{name}.\n\nКанал будет работать, но НЕ запомнит, на какой серии ты остановился. Распакуй архив целиком.");
+            else
+                AppLog.Write($"скрипт {name} не найден в {bundled}");
         }
     }
 
@@ -308,10 +360,17 @@ public partial class App : Application
 
     private async Task QuitAsync()
     {
-        if (_controller is not null)
-            await _controller.QuitAsync();   // вежливо просим mpv закрыться
+        try
+        {
+            if (_controller is not null)
+                await _controller.QuitAsync();   // вежливо просим mpv закрыться
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"выход: mpv не ответил ({ex.Message}) — закрываемся принудительно");
+        }
 
-        Shutdown();
+        Shutdown();   // выход обязан сработать, даже если IPC отвалился
     }
 
     private void OnMpvExited(object? sender, EventArgs e) =>
