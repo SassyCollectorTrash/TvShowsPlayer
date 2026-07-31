@@ -107,6 +107,10 @@ public sealed class MpvController : IDisposable
     public Task<double> GetTimePosAsync(CancellationToken cancellationToken = default) =>
         GetAsync<double>("time-pos", cancellationToken);
 
+    /// <summary>Выключен ли сейчас звук у плеера (<c>mute</c>).</summary>
+    public Task<bool> GetMuteAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<bool>("mute", cancellationToken);
+
     /// <summary>Экраны, на которых сейчас окно канала (<c>display-names</c>).</summary>
     public Task<string[]?> GetDisplayNamesAsync(CancellationToken cancellationToken = default) =>
         GetAsync<string[]>("display-names", cancellationToken);

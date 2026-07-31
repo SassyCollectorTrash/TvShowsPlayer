@@ -411,6 +411,23 @@ public partial class App : Application
         }
     }
 
+    private static async Task SyncMuteFromPlayerAsync(MpvController controller)
+    {
+        var muted = await controller.GetMuteAsync();
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var app = Current as App;
+            if (app is null || app._callMuted == muted)
+                return;
+
+            app._callMuted = muted;
+            if (app._callModeItem is not null)
+                app._callModeItem.IsChecked = muted;
+
+            AppLog.Write($"состояние «Без звука» взято у плеера: {(muted ? "включено" : "выключено")}");
+        });
+    }
+
     // Подключение к mpv фоном: провал больше не теряется молча (иначе трей и хоткеи
     // просто ничего не делают, и понять причину нельзя).
     private static async Task ConnectControllerAsync(MpvController controller)
@@ -425,6 +442,11 @@ public partial class App : Application
             }
 
             AppLog.Write("IPC: подключились к mpv");
+
+            // Галочку «Без звука» берём у самого плеера: после переподключения или
+            // перезапуска канала местный флажок мог разойтись с действительностью,
+            // и тогда «включить звук» сработало бы наоборот.
+            await SyncMuteFromPlayerAsync(controller);
 
             // На каком экране канал оказался НА САМОМ ДЕЛЕ — чтобы жалобу «показывает
             // не на том мониторе» можно было разобрать по журналу, а не гадать.
