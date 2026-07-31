@@ -153,21 +153,41 @@ public partial class App : Application
         // Трей и хоткеи уже живут — теперь эфир. Если библиотеки нет, приложение
         // ОСТАЁТСЯ в трее и открывает настройки: раньше mpv с пустым плейлистом
         // сразу выходил и уносил приложение с собой, и указать папку было негде.
-        if (!StartPlayback(config))
+        var started = StartPlayback(config);
+        if (started != PlaybackStart.Started)
         {
-            AppLog.Write("библиотека не указана или недоступна — эфир не запущен, открываю настройки");
+            AppLog.Write($"эфир не запущен ({started}) — открываю настройки");
             OnSettings(this, EventArgs.Empty);
+
+            if (started == PlaybackStart.NothingToPlay)
+                AppLog.ShowWarning(
+                    "В папке пока нет серий, готовых к эфиру.\n\n" +
+                    "Если файлы только что скачались, канал возьмёт их, когда они полежат без изменений " +
+                    "(срок — «Настройки → Пути»). Посмотреть, что нашлось, можно на вкладке «Библиотека».");
+
             return;
         }
 
         StartLibraryWatch(config);   // новые сериалы подхватываются сами
     }
 
+    /// <summary>Чем закончилась попытка поднять эфир.</summary>
+    private enum PlaybackStart
+    {
+        Started,
+
+        /// <summary>Папка с мультфильмами не указана или недоступна.</summary>
+        NoLibrary,
+
+        /// <summary>Папка есть, но играть нечего: пусто или всё ещё «не отстоялось».</summary>
+        NothingToPlay,
+    }
+
     /// <summary>
-    /// Собрать плейлист и поднять mpv. <c>false</c> — библиотеки нет (папка не задана
-    /// или недоступна), эфир не запускаем.
+    /// Собрать плейлист и поднять mpv. Не запускаем пустой канал: чёрный экран без
+    /// объяснений выглядит как поломка, а причина у него всегда конкретная.
     /// </summary>
-    private bool StartPlayback(AppConfig config)
+    private PlaybackStart StartPlayback(AppConfig config)
     {
         var isProd = _mode == ChannelMode.Production;
         var playlist = Path.Combine(_configDir, "channel.m3u");
@@ -186,11 +206,18 @@ public partial class App : Application
         });
 
         // Плейлиста нет вообще (первый запуск без библиотеки) — запускать нечего.
-        if (build.LibraryMissing && !File.Exists(playlist))
-            return false;
+        if (build.LibraryMissing && !HasEntries(playlist))
+            return PlaybackStart.NoLibrary;
 
         if (build.LibraryMissing)
             AppLog.Write($"библиотека недоступна ({config.CartoonsRoot}) — играем прежний плейлист");
+
+        // Папка есть, но в эфир идти нечему: пусто или всё ещё качается.
+        if (!HasEntries(playlist))
+        {
+            AppLog.Write($"в библиотеке нет готовых серий ({config.CartoonsRoot})");
+            return PlaybackStart.NothingToPlay;
+        }
 
         var pipeName = isProd ? Branding.PipeName : Branding.PipeNameDev;
         var options = new MpvLaunchOptions
@@ -221,7 +248,23 @@ public partial class App : Application
         _controller = new MpvController(pipeName);
         _ = ConnectControllerAsync(_controller);   // фоновое подключение к pipe (с ретраем)
 
-        return true;
+        return PlaybackStart.Started;
+    }
+
+    /// <summary>Есть ли в плейлисте хоть одна серия (строки-комментарии не считаются).</summary>
+    private static bool HasEntries(string playlistPath)
+    {
+        if (!File.Exists(playlistPath))
+            return false;
+
+        try
+        {
+            return File.ReadLines(playlistPath).Any(l => l.Length > 0 && !l.StartsWith('#'));
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -251,10 +294,19 @@ public partial class App : Application
             if (_callModeItem is not null)
                 _callModeItem.IsChecked = false;
 
-            if (!StartPlayback(config))
-                AppLog.ShowWarning("Папка с мультфильмами не указана или недоступна.\n\nОткрой «Настройки → Пути» и выбери папку.");
-            else
-                AppLog.Write("канал перезапущен из трея");
+            switch (StartPlayback(config))
+            {
+                case PlaybackStart.Started:
+                    AppLog.Write("канал перезапущен");
+                    StartLibraryWatch(config);   // таймер жил при старом эфире — поднимаем заново
+                    break;
+                case PlaybackStart.NoLibrary:
+                    AppLog.ShowWarning("Папка с мультфильмами не указана или недоступна.\n\nОткрой «Настройки → Пути» и выбери папку.");
+                    break;
+                case PlaybackStart.NothingToPlay:
+                    AppLog.ShowWarning("В папке пока нет серий, готовых к эфиру.\n\nЕсли файлы только что скачались, подожди — канал возьмёт их сам.");
+                    break;
+            }
         }
         catch (Exception ex)
         {
@@ -467,6 +519,9 @@ public partial class App : Application
     // без похода в настройки. Недокачанные серии отсекает «выдержка» (SettleMinutes).
     private void StartLibraryWatch(AppConfig config)
     {
+        _libraryTimer?.Stop();
+        _libraryTimer = null;
+
         if (config.AutoRefreshMinutes <= 0)
             return;
 
