@@ -13,16 +13,27 @@ internal static class AppLog
 {
     private const int MbIconError = 0x00000010;
     private const int MbIconWarning = 0x00000030;
+    private const int MbIconInformation = 0x00000040;
 
     private static string? _logPath;
+
+    /// <summary>Вести ли журнал (настройка пользователя). Сообщения об ошибках
+    /// показываются в любом случае — их прячут только из файла.</summary>
+    public static bool Enabled { get; set; } = true;
+
+    /// <summary>Папка с журналом — чтобы её можно было открыть из настроек.</summary>
+    public static string? Directory { get; private set; }
+
+    public static string? Path => _logPath;
 
     /// <summary>Куда писать журнал (вызывается, как только известна папка конфига).</summary>
     public static void UseDirectory(string configDir)
     {
         try
         {
-            Directory.CreateDirectory(configDir);
-            _logPath = Path.Combine(configDir, "localtv-app.log");
+            System.IO.Directory.CreateDirectory(configDir);
+            Directory = configDir;
+            _logPath = System.IO.Path.Combine(configDir, "localtv-app.log");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -38,7 +49,7 @@ internal static class AppLog
 
     public static void Write(string message)
     {
-        if (_logPath is null)
+        if (_logPath is null || !Enabled)
             return;
 
         lock (Gate)
@@ -98,6 +109,13 @@ internal static class AppLog
     {
         Write("ВНИМАНИЕ: " + message);
         MessageBox(IntPtr.Zero, message, Branding.AppName, MbIconWarning);
+    }
+
+    /// <summary>Просто сообщить (успех, итог действия) — со значком «информация».</summary>
+    public static void ShowInfo(string message)
+    {
+        Write("СООБЩЕНИЕ: " + message);
+        MessageBox(IntPtr.Zero, message, Branding.AppName, MbIconInformation);
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]

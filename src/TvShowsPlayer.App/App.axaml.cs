@@ -105,8 +105,15 @@ public partial class App : Application
         // Dev: dev-config рядом с exe (оконный, свой pipe, без resume) — не трогает живой канал.
         // Prod: %LOCALAPPDATA%\LocalTV — вне папки приложения, чтобы обновление (замена
         // папки/распаковка новой версии) НЕ затронуло настройки и прогресс просмотра.
+        // Явно заданная папка настроек (переносная установка, проверка на копии данных).
+        var configDirOverride = Environment.GetEnvironmentVariable("LOCALTV_CONFIG_DIR");
+
         string configDir;
-        if (isProd)
+        if (!string.IsNullOrWhiteSpace(configDirOverride))
+        {
+            configDir = configDirOverride;
+        }
+        else if (isProd)
         {
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrEmpty(localAppData))   // без %LOCALAPPDATA% не кладём конфиг в CWD
@@ -126,6 +133,10 @@ public partial class App : Application
             configDir = Path.Combine(appDir, "dev-config");
         }
         AppLog.UseDirectory(configDir);
+
+        // Настройку журнала применяем ДО первой записи, иначе выключенный журнал
+        // всё равно успел бы записать пару строк.
+        AppLog.Enabled = AppConfig.Load(Path.Combine(configDir, "appconfig.json")).LoggingEnabled;
         AppLog.Write($"старт: режим={_mode}, config-dir={configDir}");
 
         // Пригодится, когда канал «показывает не на том экране».
@@ -170,7 +181,7 @@ public partial class App : Application
         // канал — и не понимает, почему его нет.
         if (_lastBuildNotice.Length > 0)
         {
-            AppLog.ShowWarning("Канал включён." + _lastBuildNotice);
+            AppLog.ShowInfo("Канал включён." + _lastBuildNotice);
             _lastBuildNotice = string.Empty;
         }
 
@@ -299,20 +310,23 @@ public partial class App : Application
         if (build.FoundShows.Count == 0 && build.NewShows.Count == 0)
             return;
 
-        var known = new HashSet<string>(config.KnownShows, StringComparer.OrdinalIgnoreCase);
         var excluded = new HashSet<string>(config.ExcludedShows, StringComparer.OrdinalIgnoreCase);
         var changed = false;
 
         foreach (var name in build.NewShows)
             changed |= excluded.Add(name);
 
-        foreach (var name in build.FoundShows)
-            changed |= known.Add(name);
+        // Список известных = то, что есть в папке СЕЙЧАС. Иначе удалённый и заново
+        // скачанный сериал считался бы старым знакомым и уехал бы в эфир прямо во
+        // время закачки.
+        var known = build.FoundShows.ToList();
+        if (!known.OrderBy(n => n).SequenceEqual(config.KnownShows.OrderBy(n => n), StringComparer.OrdinalIgnoreCase))
+            changed = true;
 
         if (!changed)
             return;
 
-        config.KnownShows = known.ToList();
+        config.KnownShows = known;
         config.ExcludedShows = excluded.ToList();
         config.Save(_configPath);
 
@@ -466,9 +480,22 @@ public partial class App : Application
         if (_hotkeys.Failed.Count > 0)
         {
             var names = string.Join(", ", _hotkeys.Failed.Select(a => $"{config.HotkeyModifiers}+{Hotkeys.KeyName(a)}"));
-            AppLog.Write($"хоткеи заняты другими программами: {names}");
-            _hotkeyWarning = $"Эти сочетания клавиш уже заняты другой программой и работать не будут:\n{names}.\n\n" +
-                             "Можно выбрать другой набор клавиш в настройках, на вкладке «Звук и экран».";
+            AppLog.Write($"клавиши заняты другими программами: {names}");
+
+            // Показываем один раз на один и тот же конфликт: канал запускается вместе
+            // с Windows, и одно и то же окно каждое утро — это уже не помощь.
+            if (!string.Equals(config.ReportedHotkeyConflicts, names, StringComparison.Ordinal))
+            {
+                _hotkeyWarning = $"Эти сочетания клавиш уже заняты другой программой и работать не будут:\n{names}.\n\n" +
+                                 "Можно выбрать другой набор клавиш в настройках, на вкладке «Звук и экран».";
+                config.ReportedHotkeyConflicts = names;
+                config.Save(_configPath);
+            }
+        }
+        else if (config.ReportedHotkeyConflicts.Length > 0)
+        {
+            config.ReportedHotkeyConflicts = string.Empty;   // конфликт ушёл — сообщим о новом
+            config.Save(_configPath);
         }
     }
 
@@ -511,16 +538,13 @@ public partial class App : Application
 #endif
     }
 
-    // Если путь к mpv из конфига не существует, но рядом есть бандл-mpv — берём его
-    // (свежий получатель работает без ручной настройки).
     private static void ResolveMpvPath(AppConfig config, string appDir)
     {
-        if (File.Exists(config.MpvPath))
-            return;
+        var chosen = MpvPathResolver.Resolve(config.MpvPath, appDir);
+        if (!string.Equals(chosen, config.MpvPath, StringComparison.OrdinalIgnoreCase))
+            AppLog.Write($"проигрыватель: {chosen} (в настройках было «{config.MpvPath}»)");
 
-        var bundled = Path.Combine(appDir, "mpv", "mpv.exe");
-        if (File.Exists(bundled))
-            config.MpvPath = bundled;
+        config.MpvPath = chosen;
     }
 
     // Провизионим Lua из бандла приложения (<appdir>/scripts) в config-dir по режиму:
@@ -726,7 +750,7 @@ public partial class App : Application
             if (!result.Rebuilt)
             {
                 AppLog.Write($"обновление списка: изменений нет (пропущено {result.SkippedEpisodes})");
-                AppLog.ShowWarning(newShows.Length > 0
+                AppLog.ShowInfo(newShows.Length > 0
                     ? "Список проверен." + newShows + skipped
                     : "Ничего нового не нашлось — список сериалов не изменился." + skipped);
                 return;
@@ -743,7 +767,7 @@ public partial class App : Application
             if (timePos > 1)
                 await _controller.SeekAsync(timePos);   // возвращаемся на ту же секунду
 
-            AppLog.ShowWarning(
+            AppLog.ShowInfo(
                 $"Список обновлён: в эфире {result.ShowCount} сериалов, {result.PlaylistLength} серий."
                 + newShows + skipped);
         }

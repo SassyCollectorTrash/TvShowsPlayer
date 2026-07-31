@@ -37,6 +37,22 @@ public class RobustnessTests : IDisposable
     }
 
     [Fact]
+    public void Scan_SystemFolders_AreSkipped_NotCrashing()
+    {
+        // если корнем указать целый диск, там попадутся системные и закрытые папки
+        // («System Volume Information») — весь скан из-за них падать не должен
+        var show = MakeShow("Сериал");
+        Touch(show, "S01E01.mkv");
+        var system = MakeShow("System Volume Information");
+        Touch(system, "служебное.mkv");
+        new DirectoryInfo(system).Attributes |= FileAttributes.System;
+
+        var shows = ShowScanner.Scan(_root);
+
+        shows.Select(s => s.Name).Should().ContainSingle().Which.Should().Be("Сериал");
+    }
+
+    [Fact]
     public void Order_HugeNumbers_AreComparedWithoutOverflow()
     {
         var ordered = EpisodeOrdering.Order(new[]

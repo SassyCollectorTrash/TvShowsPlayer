@@ -8,6 +8,21 @@ namespace TvShowsPlayer.Core;
 /// </summary>
 public static class ShowScanner
 {
+    // Папку без доступа (системная вроде «System Volume Information», чужой профиль,
+    // если корнем указали весь диск) пропускаем, а не роняем весь скан библиотеки.
+    private static readonly EnumerationOptions RecursiveSearch = new()
+    {
+        RecurseSubdirectories = true,
+        IgnoreInaccessible = true,
+        AttributesToSkip = FileAttributes.System,
+    };
+
+    private static readonly EnumerationOptions TopLevelSearch = new()
+    {
+        IgnoreInaccessible = true,
+        AttributesToSkip = FileAttributes.System,
+    };
+
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mkv", ".mp4", ".avi", ".m4v", ".mov", ".webm", ".ts",
@@ -40,7 +55,7 @@ public static class ShowScanner
         var shows = new List<Show>();
         var nowUtc = DateTime.UtcNow;
 
-        foreach (var showDir in Directory.EnumerateDirectories(root).OrderBy(NameKey))
+        foreach (var showDir in Directory.EnumerateDirectories(root, "*", TopLevelSearch).OrderBy(NameKey))
         {
             var name = Path.GetFileName(showDir);
             if (excludeSet.Contains(name))
@@ -77,7 +92,7 @@ public static class ShowScanner
         // DirectoryInfo (а не Directory): даты изменения приезжают вместе с перечислением,
         // без отдельного обращения к диску на каждый файл.
         var all = new DirectoryInfo(showDir)
-            .EnumerateFiles("*", SearchOption.AllDirectories)
+            .EnumerateFiles("*", RecursiveSearch)
             .Where(f => VideoExtensions.Contains(f.Extension))
             .ToList();
 

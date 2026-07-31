@@ -10,7 +10,9 @@ namespace TvShowsPlayer.Core;
 public sealed class AppConfig
 {
     // Пути
-    public string MpvPath { get; set; } = @"C:\mpv\mpv.exe";
+    // Пусто = взять проигрыватель из комплекта (см. MpvPathResolver). Прежний дефолт
+    // указывал на mpv в системе — и программа незаметно играла им.
+    public string MpvPath { get; set; } = "";
     public string CartoonsRoot { get; set; } = "";   // укажет пользователь в настройках
 
     // Сериалы вне карусели (качаются / неполные / битые). Имена папок.
@@ -47,10 +49,18 @@ public sealed class AppConfig
     // номер 1 не существует, и канал уезжал бы «в никуда».
     public int FsScreen { get; set; }
 
+    // Журнал работы: подробный, поэтому пусть его можно выключить. По умолчанию
+    // включён — без него разбирать «нажал, ничего не произошло» нечем.
+    public bool LoggingEnabled { get; set; } = true;
+
     // Горячие клавиши: набор модификаторов (на случай конфликта с другой программой)
     // и общий выключатель.
     public string HotkeyModifiers { get; set; } = "Ctrl+Alt";
     public bool HotkeysEnabled { get; set; } = true;
+
+    // О каких занятых комбинациях уже сообщали. Канал стартует вместе с Windows,
+    // поэтому одно и то же окно при каждом запуске — это раздражение, а не помощь.
+    public string ReportedHotkeyConflicts { get; set; } = "";
 
     // OSD
     public bool ClockEnabled { get; set; } = true;

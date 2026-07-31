@@ -235,6 +235,13 @@
                     SelectionChanged="OnHotkeyModifiersChanged" />
           <TextBlock Text="Клавиши работают из любой программы: выбранные кнопки + Пробел — пауза, + стрелка вправо — следующая серия. Если такое сочетание уже занято другой программой, выбери другое. Сработает после перезапуска программы."
                      Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+
+          <TextBlock Classes="label" Text="ЖУРНАЛ РАБОТЫ" />
+          <CheckBox IsChecked="{Binding LoggingEnabled, Mode=TwoWay}"
+                    Content="Записывать, что делает программа" Margin="0,0,0,6" />
+          <Button Content="Открыть папку с журналом" Click="OnOpenLogFolder" HorizontalAlignment="Left" />
+          <TextBlock Text="Журнал помогает понять, почему что-то пошло не так: в нём видно каждое действие и ответ проигрывателя. Файл сам ограничивается по размеру."
+                     Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
         </StackPanel>
       </TabItem>
 

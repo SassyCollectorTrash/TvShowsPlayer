@@ -120,6 +120,22 @@ public partial class SettingsWindow : Window
             _config.HotkeyModifiers = set;
     }
 
+    private void OnOpenLogFolder(object? sender, RoutedEventArgs e)
+    {
+        var folder = AppLog.Directory;
+        if (string.IsNullOrEmpty(folder))
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _status.Text = $"Не удалось открыть папку: {ex.Message}";
+        }
+    }
+
     private void OnScreenChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is ComboBox { SelectedItem: DisplayDevice screen })
@@ -398,8 +414,16 @@ public partial class SettingsWindow : Window
         _ = RefreshNowAndNext();
     }
 
+    private bool _refreshing;
+
     private async Task RefreshNowAndNext()
     {
+        // Опрос идёт раз в 2 секунды, а запрос к плееру может ждать ответа дольше.
+        // Без этой защиты зависшие запросы копились бы друг за другом.
+        if (_refreshing)
+            return;
+        _refreshing = true;
+
         // IPC-граница + async void выше: ошибка не должна ронять приложение.
         try
         {
@@ -428,6 +452,10 @@ public partial class SettingsWindow : Window
         catch
         {
             // молча — фоновый опрос
+        }
+        finally
+        {
+            _refreshing = false;
         }
     }
 
@@ -638,6 +666,8 @@ public partial class SettingsWindow : Window
         ApplyShowConfig();
         if (!string.IsNullOrEmpty(_configPath))
             _config.Save(_configPath);
+
+        AppLog.Enabled = _config.LoggingEnabled;   // применяем сразу, без перезапуска
 
         _status.Text = _controller is null
             ? "Сохранено. Теперь нажми «Запустить канал»."
