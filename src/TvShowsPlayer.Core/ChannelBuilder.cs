@@ -28,6 +28,9 @@ public sealed record ChannelBuildResult
 
     /// <summary>Библиотека не указана или недоступна — плейлист намеренно не трогали.</summary>
     public bool LibraryMissing { get; init; }
+
+    /// <summary>Файлов пропущено как «пишется прямо сейчас» (стоит сказать пользователю).</summary>
+    public int SkippedEpisodes { get; init; }
     public int ShowCount { get; init; }
     public int PlaylistLength { get; init; }
     public bool Capped { get; init; }
@@ -50,7 +53,8 @@ public static class ChannelBuilder
             return new ChannelBuildResult { Rebuilt = false, LibraryMissing = true };
 
         var shows = ShowOrdering.Apply(
-            ShowScanner.Scan(options.Root, options.ExcludedShows, options.SettleAfter), options.ShowOrder);
+            ShowScanner.Scan(options.Root, out var skipped, options.ExcludedShows, options.SettleAfter),
+            options.ShowOrder);
 
         // В сигнатуру входят и параметры карусели: иначе смена «окна»/«шага» в
         // настройках не пересобирала бы плейлист при перезапуске.
@@ -58,7 +62,7 @@ public static class ChannelBuilder
             shows, options.Window, options.Step, options.CapRotations);
 
         if (!options.Force && PlaylistWriter.IsUpToDate(options.PlaylistPath, signature))
-            return new ChannelBuildResult { Rebuilt = false, ShowCount = shows.Count };
+            return new ChannelBuildResult { Rebuilt = false, ShowCount = shows.Count, SkippedEpisodes = skipped };
 
         var state = ChannelState.Load(options.StatePath);
         var startCursors = CarouselSeeding.StartCursors(options.Root, shows, state.Shows);
@@ -79,6 +83,7 @@ public static class ChannelBuilder
             ShowCount = shows.Count,
             PlaylistLength = carousel.Playlist.Count,
             Capped = carousel.Capped,
+            SkippedEpisodes = skipped,
         };
     }
 }

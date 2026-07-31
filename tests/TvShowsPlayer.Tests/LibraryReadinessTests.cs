@@ -108,4 +108,17 @@ public class ShowScannerSettlingTests : IDisposable
 
         ShowScanner.Scan(_root).Should().ContainSingle();
     }
+
+    [Fact]
+    public void Scan_ReportsSkippedFiles_SoUserCanBeTold()
+    {
+        var show = MakeShow("Геркулес");
+        Touch(show, "S01E01.mkv", TimeSpan.FromHours(5));
+        Touch(show, "S02E01.mkv", TimeSpan.FromSeconds(30));
+        Touch(show, "S02E02.mkv", TimeSpan.FromSeconds(30));
+
+        ShowScanner.Scan(_root, out var skipped, excluded: null, settleAfter: TimeSpan.FromMinutes(10));
+
+        skipped.Should().Be(2, "о пропущенных файлах программа обязана сказать вслух");
+    }
 }

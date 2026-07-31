@@ -31,7 +31,6 @@ public partial class App : Application
     private string _configPath = string.Empty;
     private string _configDir = string.Empty;
     private Mutex? _instanceLock;
-    private DispatcherTimer? _libraryTimer;
     private DispatcherTimer? _volumeSaveTimer;
     private bool _refreshingLibrary;
     private bool _callMuted;
@@ -171,8 +170,6 @@ public partial class App : Application
 
             return;
         }
-
-        StartLibraryWatch(config);   // новые сериалы подхватываются сами
     }
 
     /// <summary>Чем закончилась попытка поднять эфир.</summary>
@@ -302,7 +299,6 @@ public partial class App : Application
             {
                 case PlaybackStart.Started:
                     AppLog.Write("канал перезапущен");
-                    StartLibraryWatch(config);   // таймер жил при старом эфире — поднимаем заново
                     break;
                 case PlaybackStart.NoLibrary:
                     AppLog.ShowWarning("Папка с сериалами не выбрана или недоступна.\n\nОткрой настройки, вкладка «Сериалы», и выбери папку.");
@@ -520,28 +516,15 @@ public partial class App : Application
 
     private void OnRestartChannel(object? sender, EventArgs e) => RestartChannel();
 
-    private void OnRefreshLibrary(object? sender, EventArgs e) => _ = RefreshLibraryAsync(manual: true);
-
-    // Периодическая проверка библиотеки: скачанные сериалы попадают в эфир сами,
-    // без похода в настройки. Недокачанные серии отсекает «выдержка» (SettleMinutes).
-    private void StartLibraryWatch(AppConfig config)
-    {
-        _libraryTimer?.Stop();
-        _libraryTimer = null;
-
-        if (config.AutoRefreshMinutes <= 0)
-            return;
-
-        _libraryTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(config.AutoRefreshMinutes) };
-        _libraryTimer.Tick += (_, _) => _ = RefreshLibraryAsync(manual: false);
-        _libraryTimer.Start();
-    }
+    private void OnRefreshLibrary(object? sender, EventArgs e) => _ = RefreshLibraryAsync();
 
     /// <summary>
-    /// Пересобрать канал, если состав библиотеки изменился, и подхватить его «на лету»,
-    /// вернувшись на ту же секунду той же серии (иначе обновление отматывало бы эфир).
+    /// Обновить список сериалов ПО КОМАНДЕ пользователя и подхватить изменения «на лету»,
+    /// вернувшись на ту же секунду той же серии. Сама программа за библиотекой не следит:
+    /// определить «файл докачан» надёжно нельзя (торрент резервирует размер заранее,
+    /// куски идут вразнобой), а тихо добавленная обрезанная серия хуже лишнего клика.
     /// </summary>
-    private async Task RefreshLibraryAsync(bool manual)
+    private async Task RefreshLibraryAsync()
     {
         if (_refreshingLibrary)
             return;
@@ -582,19 +565,24 @@ public partial class App : Application
 
             if (result.LibraryMissing)
             {
-                AppLog.Write("обновление библиотеки: папка недоступна — пропускаем");
-                if (manual)
-                    AppLog.ShowWarning("Папка с сериалами сейчас недоступна.\n\nЕсли сериалы лежат на внешнем диске — проверь, подключён ли он.");
+                AppLog.Write("обновление списка: папка недоступна");
+                AppLog.ShowWarning("Папка с сериалами сейчас недоступна.\n\nЕсли сериалы лежат на внешнем диске — проверь, подключён ли он.");
                 return;
             }
+
+            var skipped = result.SkippedEpisodes > 0
+                ? $"\n\nПропущено файлов, в которые идёт запись прямо сейчас: {result.SkippedEpisodes}. " +
+                  "Когда закачка закончится, обнови список ещё раз."
+                : string.Empty;
 
             if (!result.Rebuilt)
             {
-                AppLog.Write("обновление библиотеки: изменений нет");
+                AppLog.Write($"обновление списка: изменений нет (пропущено {result.SkippedEpisodes})");
+                AppLog.ShowWarning("Новых серий не нашлось — список сериалов не изменился." + skipped);
                 return;
             }
 
-            AppLog.Write($"обновление библиотеки: состав изменился → {result.ShowCount} сериалов, {result.PlaylistLength} записей");
+            AppLog.Write($"обновление списка: {result.ShowCount} сериалов, {result.PlaylistLength} серий, пропущено {result.SkippedEpisodes}");
 
             if (_controller is null)
                 return;
@@ -604,6 +592,9 @@ public partial class App : Application
             await _controller.SetPlaylistPosAsync(pos);
             if (timePos > 1)
                 await _controller.SeekAsync(timePos);   // возвращаемся на ту же секунду
+
+            AppLog.ShowWarning(
+                $"Список обновлён: в эфире {result.ShowCount} сериалов, {result.PlaylistLength} серий." + skipped);
         }
         catch (Exception ex)
         {
@@ -693,7 +684,6 @@ public partial class App : Application
 
     private void Cleanup()
     {
-        _libraryTimer?.Stop();
         _volumeSaveTimer?.Stop();
         _hotkeys?.Dispose();   // снимает RegisterHotKey
         if (_wndProcHook is not null && _hotkeyWindow is not null)

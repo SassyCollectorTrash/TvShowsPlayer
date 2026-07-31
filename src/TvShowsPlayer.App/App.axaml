@@ -20,7 +20,7 @@
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Без звука" ToggleType="CheckBox" Click="OnToggleCall" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Поискать новые сериалы" Click="OnRefreshLibrary" />
+            <NativeMenuItem Header="Обновить список сериалов" Click="OnRefreshLibrary" />
             <NativeMenuItem Header="Перезапустить канал" Click="OnRestartChannel" />
             <NativeMenuItem Header="Настройки…" Click="OnSettings" />
             <NativeMenuItemSeparator />

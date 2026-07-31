@@ -151,11 +151,11 @@
           <TextBlock Text="Внутри должна быть отдельная папка на каждый сериал, а в ней — файлы серий. Например: Сериалы \ Чип и Дейл \ Серия 01.mkv"
                      Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
 
-          <TextBlock Classes="label" Text="КАК ЧАСТО ИСКАТЬ НОВЫЕ СЕРИАЛЫ, МИНУТ (0 — НЕ ИСКАТЬ)" />
-          <NumericUpDown Value="{Binding AutoRefreshMinutes, Mode=TwoWay}" Minimum="0" Maximum="720" Increment="5" />
-          <TextBlock Classes="label" Text="СКОЛЬКО ЖДАТЬ, ПОКА СЕРИЯ ДОКАЧАЕТСЯ, МИНУТ" />
-          <NumericUpDown Value="{Binding SettleMinutes, Mode=TwoWay}" Minimum="0" Maximum="240" Increment="5" />
-          <TextBlock Text="Пока серия скачивается, файл ещё меняется. Канал берёт её в эфир, только если файл пролежал без изменений указанное время — иначе можно попасть на недокачанную серию."
+          <TextBlock Text="Добавил новый сериал в папку — обнови список: значок у часов → «Обновить список сериалов». Сама программа в папку не заглядывает: пока сериал качается, отличить готовые серии от недокачанных нельзя."
+                     Foreground="#b5bac1" FontSize="13" TextWrapping="Wrap" Margin="0,18,0,0" />
+          <TextBlock Classes="label" Text="НЕ БРАТЬ ФАЙЛЫ, В КОТОРЫЕ ИДЁТ ЗАПИСЬ, МИНУТ" />
+          <NumericUpDown Value="{Binding SettleMinutes, Mode=TwoWay}" Minimum="0" Maximum="240" Increment="1" />
+          <TextBlock Text="Небольшая подстраховка на случай, если обновить список нажали прямо во время закачки. Полной гарантии это не даёт — дожидайся конца загрузки сам."
                      Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
 
           <TextBlock Classes="label" Text="ПРОГРАММА ВОСПРОИЗВЕДЕНИЯ (ВХОДИТ В КОМПЛЕКТ — МЕНЯТЬ НЕ НУЖНО)" />

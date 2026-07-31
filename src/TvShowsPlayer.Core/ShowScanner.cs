@@ -23,7 +23,15 @@ public static class ShowScanner
     /// попасть в эфир (защита от недокачанных серий). <c>null</c> — не проверять.</param>
     public static IReadOnlyList<Show> Scan(
         string root, IReadOnlyCollection<string>? excluded = null, TimeSpan? settleAfter = null)
+        => Scan(root, out _, excluded, settleAfter);
+
+    /// <param name="skippedFiles">Сколько файлов пропущено как «пишется прямо сейчас» —
+    /// об этом стоит сказать пользователю, а не решать за него молча.</param>
+    public static IReadOnlyList<Show> Scan(
+        string root, out int skippedFiles,
+        IReadOnlyCollection<string>? excluded = null, TimeSpan? settleAfter = null)
     {
+        skippedFiles = 0;
         // Библиотека не указана / папка не существует (свежая установка) → пусто, не падаем.
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return Array.Empty<Show>();
@@ -38,7 +46,8 @@ public static class ShowScanner
             if (excludeSet.Contains(name))
                 continue;   // временно вне канала
 
-            var episodes = GatherEpisodes(showDir, settleAfter, nowUtc);
+            var episodes = GatherEpisodes(showDir, settleAfter, nowUtc, out var skipped);
+            skippedFiles += skipped;
             if (episodes.Count > 0)
                 shows.Add(new Show(name, episodes));
         }
@@ -62,17 +71,23 @@ public static class ShowScanner
     }
 
     /// <summary>Рекурсивно собрать видеофайлы сериала и упорядочить их по показу.</summary>
-    private static IReadOnlyList<string> GatherEpisodes(string showDir, TimeSpan? settleAfter, DateTime nowUtc)
+    private static IReadOnlyList<string> GatherEpisodes(
+        string showDir, TimeSpan? settleAfter, DateTime nowUtc, out int skippedFiles)
     {
         // DirectoryInfo (а не Directory): даты изменения приезжают вместе с перечислением,
         // без отдельного обращения к диску на каждый файл.
-        var files = new DirectoryInfo(showDir)
+        var all = new DirectoryInfo(showDir)
             .EnumerateFiles("*", SearchOption.AllDirectories)
             .Where(f => VideoExtensions.Contains(f.Extension))
+            .ToList();
+
+        var ready = all
             .Where(f => settleAfter is not TimeSpan quiet
                         || LibraryReadiness.IsSettled(f.FullName, f.LastWriteTimeUtc, nowUtc, quiet))
-            .Select(f => f.FullName)
             .ToList();
+
+        skippedFiles = all.Count - ready.Count;
+        var files = ready.Select(f => f.FullName).ToList();
 
         // Порядок считаем по путям ОТНОСИТЕЛЬНО папки сериала (как в Python): так
         // имя самого сериала не влияет на распознавание сезона/номера, а на выходе
