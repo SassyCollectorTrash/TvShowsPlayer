@@ -32,6 +32,7 @@ public partial class App : Application
     private string _configDir = string.Empty;
     private Mutex? _instanceLock;
     private DispatcherTimer? _volumeSaveTimer;
+    private string _lastBuildNotice = string.Empty;
     private bool _refreshingLibrary;
     private bool _callMuted;
     private bool _shuttingDown;
@@ -156,6 +157,15 @@ public partial class App : Application
         // ОСТАЁТСЯ в трее и открывает настройки: раньше mpv с пустым плейлистом
         // сразу выходил и уносил приложение с собой, и указать папку было негде.
         var started = StartPlayback(config);
+
+        // О новинках сообщаем сразу: иначе человек положил сериал в папку, включил
+        // канал — и не понимает, почему его нет.
+        if (_lastBuildNotice.Length > 0)
+        {
+            AppLog.ShowWarning("Канал включён." + _lastBuildNotice);
+            _lastBuildNotice = string.Empty;
+        }
+
         if (started != PlaybackStart.Started)
         {
             AppLog.Write($"эфир не запущен ({started}) — открываю настройки");
@@ -204,7 +214,11 @@ public partial class App : Application
             Step = config.Step,
             CapRotations = config.CapRotations,
             SettleAfter = TimeSpan.FromMinutes(config.SettleMinutes),
+            KnownShows = config.KnownShows,
         });
+
+        RememberShows(config, build);
+        _lastBuildNotice = NewShowsNotice(build);
 
         // Плейлиста нет вообще (первый запуск без библиотеки) — запускать нечего.
         if (build.LibraryMissing && !HasEntries(playlist))
@@ -250,6 +264,50 @@ public partial class App : Application
         _ = ConnectControllerAsync(_controller);   // фоновое подключение к pipe (с ретраем)
 
         return PlaybackStart.Started;
+    }
+
+    /// <summary>
+    /// Запомнить найденные сериалы и выключить новинки. Программа не знает, докачан ли
+    /// появившийся сериал, поэтому в эфир его не ставит — он ждёт галочки в настройках.
+    /// </summary>
+    private void RememberShows(AppConfig config, ChannelBuildResult build)
+    {
+        if (build.FoundShows.Count == 0 && build.NewShows.Count == 0)
+            return;
+
+        var known = new HashSet<string>(config.KnownShows, StringComparer.OrdinalIgnoreCase);
+        var excluded = new HashSet<string>(config.ExcludedShows, StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var name in build.NewShows)
+            changed |= excluded.Add(name);
+
+        foreach (var name in build.FoundShows)
+            changed |= known.Add(name);
+
+        if (!changed)
+            return;
+
+        config.KnownShows = known.ToList();
+        config.ExcludedShows = excluded.ToList();
+        config.Save(_configPath);
+
+        if (build.NewShows.Count > 0)
+            AppLog.Write($"новые сериалы (пока не в эфире): {string.Join(", ", build.NewShows)}");
+    }
+
+    /// <summary>Сообщение о новинках — их надо включить вручную, иначе их «нет».</summary>
+    private static string NewShowsNotice(ChannelBuildResult build)
+    {
+        if (build.NewShows.Count == 0)
+            return string.Empty;
+
+        var names = string.Join(", ", build.NewShows.Take(5).Select(n => $"«{n}»"));
+        if (build.NewShows.Count > 5)
+            names += $" и ещё {build.NewShows.Count - 5}";
+
+        return $"\n\nПоявились новые сериалы: {names}.\nВ эфир они пока не идут — программа не знает, " +
+               "докачаны ли они. Включи их галочкой в настройках, на вкладке «Что в эфире».";
     }
 
     /// <summary>Есть ли в плейлисте хоть одна серия (строки-комментарии не считаются).</summary>
@@ -561,7 +619,11 @@ public partial class App : Application
                 Step = config.Step,
                 CapRotations = config.CapRotations,
                 SettleAfter = TimeSpan.FromMinutes(config.SettleMinutes),
+                KnownShows = config.KnownShows,
             }));
+
+            RememberShows(config, result);
+            var newShows = NewShowsNotice(result);
 
             if (result.LibraryMissing)
             {
@@ -578,7 +640,9 @@ public partial class App : Application
             if (!result.Rebuilt)
             {
                 AppLog.Write($"обновление списка: изменений нет (пропущено {result.SkippedEpisodes})");
-                AppLog.ShowWarning("Новых серий не нашлось — список сериалов не изменился." + skipped);
+                AppLog.ShowWarning(newShows.Length > 0
+                    ? "Список проверен." + newShows + skipped
+                    : "Ничего нового не нашлось — список сериалов не изменился." + skipped);
                 return;
             }
 
@@ -594,7 +658,8 @@ public partial class App : Application
                 await _controller.SeekAsync(timePos);   // возвращаемся на ту же секунду
 
             AppLog.ShowWarning(
-                $"Список обновлён: в эфире {result.ShowCount} сериалов, {result.PlaylistLength} серий." + skipped);
+                $"Список обновлён: в эфире {result.ShowCount} сериалов, {result.PlaylistLength} серий."
+                + newShows + skipped);
         }
         catch (Exception ex)
         {

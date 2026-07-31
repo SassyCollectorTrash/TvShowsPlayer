@@ -18,6 +18,13 @@ public sealed record ChannelBuildOptions
     /// <summary>Сколько файл должен пролежать без изменений, чтобы попасть в эфир
     /// (защита от недокачанных серий). <c>null</c> — не проверять.</summary>
     public TimeSpan? SettleAfter { get; init; }
+
+    /// <summary>
+    /// Сериалы, которые программа уже видела. Всё, чего в списке нет, считается
+    /// новинкой и в эфир не ставится, пока пользователь не включит: докачан сериал
+    /// или нет — программе неизвестно. <c>null</c> — не отслеживать новинки.
+    /// </summary>
+    public IReadOnlyList<string>? KnownShows { get; init; }
 }
 
 /// <summary>Итог сборки.</summary>
@@ -31,6 +38,12 @@ public sealed record ChannelBuildResult
 
     /// <summary>Файлов пропущено как «пишется прямо сейчас» (стоит сказать пользователю).</summary>
     public int SkippedEpisodes { get; init; }
+
+    /// <summary>Замеченные новинки — в эфир не поставлены, ждут решения пользователя.</summary>
+    public IReadOnlyList<string> NewShows { get; init; } = Array.Empty<string>();
+
+    /// <summary>Все сериалы, найденные в папке (включая выключенные) — чтобы запомнить.</summary>
+    public IReadOnlyList<string> FoundShows { get; init; } = Array.Empty<string>();
     public int ShowCount { get; init; }
     public int PlaylistLength { get; init; }
     public bool Capped { get; init; }
@@ -52,8 +65,21 @@ public static class ChannelBuilder
         if (string.IsNullOrWhiteSpace(options.Root) || !Directory.Exists(options.Root))
             return new ChannelBuildResult { Rebuilt = false, LibraryMissing = true };
 
+        // Сканируем БЕЗ исключений: нужно увидеть всё, что есть в папке, чтобы отличить
+        // новинки от того, что пользователь выключил сам.
+        var found = ShowScanner.Scan(options.Root, out var skipped, excluded: null, options.SettleAfter);
+        var foundNames = found.Select(s => s.Name).ToList();
+
+        var excluded = new HashSet<string>(options.ExcludedShows, StringComparer.OrdinalIgnoreCase);
+        var newShows = FindNewShows(foundNames, options.KnownShows, excluded);
+
+        // Новый сериал в эфир сам не идёт: программа не знает, докачан ли он. Ждёт,
+        // пока пользователь включит его галочкой.
+        foreach (var name in newShows)
+            excluded.Add(name);
+
         var shows = ShowOrdering.Apply(
-            ShowScanner.Scan(options.Root, out var skipped, options.ExcludedShows, options.SettleAfter),
+            found.Where(s => !excluded.Contains(s.Name)).ToList(),
             options.ShowOrder);
 
         // В сигнатуру входят и параметры карусели: иначе смена «окна»/«шага» в
@@ -62,7 +88,16 @@ public static class ChannelBuilder
             shows, options.Window, options.Step, options.CapRotations);
 
         if (!options.Force && PlaylistWriter.IsUpToDate(options.PlaylistPath, signature))
-            return new ChannelBuildResult { Rebuilt = false, ShowCount = shows.Count, SkippedEpisodes = skipped };
+        {
+            return new ChannelBuildResult
+            {
+                Rebuilt = false,
+                ShowCount = shows.Count,
+                SkippedEpisodes = skipped,
+                NewShows = newShows,
+                FoundShows = foundNames,
+            };
+        }
 
         var state = ChannelState.Load(options.StatePath);
         var startCursors = CarouselSeeding.StartCursors(options.Root, shows, state.Shows);
@@ -84,6 +119,24 @@ public static class ChannelBuilder
             PlaylistLength = carousel.Playlist.Count,
             Capped = carousel.Capped,
             SkippedEpisodes = skipped,
+            NewShows = newShows,
+            FoundShows = foundNames,
         };
+    }
+
+    /// <summary>
+    /// Сериалы, которых программа раньше не видела. Первый запуск (список известных
+    /// пуст) — это настройка библиотеки, а не появление новинок: тогда новых нет.
+    /// Выключенные пользователем тоже не новинки.
+    /// </summary>
+    private static IReadOnlyList<string> FindNewShows(
+        IReadOnlyList<string> found, IReadOnlyList<string>? known, IReadOnlySet<string> excluded)
+    {
+        if (known is null || known.Count == 0)
+            return Array.Empty<string>();
+
+        var knownSet = new HashSet<string>(known, StringComparer.OrdinalIgnoreCase);
+
+        return found.Where(name => !knownSet.Contains(name) && !excluded.Contains(name)).ToList();
     }
 }

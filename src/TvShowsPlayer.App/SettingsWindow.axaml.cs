@@ -349,6 +349,13 @@ public partial class SettingsWindow : Window
     {
         _config.ShowOrder = _showRows.Select(r => r.Name).ToList();
         _config.ExcludedShows = _showRows.Where(r => !r.IsIncluded).Select(r => r.Name).ToList();
+
+        // Пользователь увидел список и решил, что включать: всё показанное считается
+        // известным, иначе включённый вручную сериал снова уехал бы в новинки.
+        var known = new HashSet<string>(_config.KnownShows, StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _showRows)
+            known.Add(row.Name);
+        _config.KnownShows = known.ToList();
     }
 
     // ---- живая панель «Сейчас в эфире» + «Далее» ----

@@ -247,8 +247,8 @@
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
               <Button Content="↑" Click="OnMoveUp" Width="42" />
               <Button Content="↓" Click="OnMoveDown" Width="42" />
-              <TextBlock Text="перетаскивай мышью; галочка — идёт в эфире" Foreground="#949ba4"
-                         VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" />
+              <TextBlock Text="перетаскивай мышью; галочка — идёт в эфире. Новые сериалы появляются здесь БЕЗ галочки: поставь её, когда закачка закончится."
+                         Foreground="#949ba4" VerticalAlignment="Center" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
             <ListBox x:Name="ShowsList" Background="#2b2d31">
               <ListBox.ItemTemplate>
