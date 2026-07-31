@@ -20,6 +20,7 @@
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Режим созвона (мьют)" ToggleType="CheckBox" Click="OnToggleCall" />
             <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Обновить библиотеку" Click="OnRefreshLibrary" />
             <NativeMenuItem Header="Перезапустить канал" Click="OnRestartChannel" />
             <NativeMenuItem Header="Настройки…" Click="OnSettings" />
             <NativeMenuItemSeparator />

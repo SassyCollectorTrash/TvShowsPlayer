@@ -78,6 +78,18 @@ public sealed class MpvController : IDisposable
     public Task<int> GetPlaylistPosAsync(CancellationToken cancellationToken = default) =>
         GetAsync<int>("playlist-pos", cancellationToken);
 
+    /// <summary>Текущая секунда внутри серии (<c>time-pos</c>).</summary>
+    public Task<double> GetTimePosAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<double>("time-pos", cancellationToken);
+
+    /// <summary>Текущая громкость плеера (<c>volume</c>).</summary>
+    public Task<double> GetVolumeAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<double>("volume", cancellationToken);
+
+    /// <summary>Перемотать на заданную секунду серии.</summary>
+    public Task SeekAsync(double seconds, CancellationToken cancellationToken = default) =>
+        SendAsync(new object[] { "seek", seconds, "absolute" }, cancellationToken);
+
     /// <summary>Перейти к позиции в плейлисте (сдвинуть указатель живого mpv).</summary>
     public Task SetPlaylistPosAsync(int pos, CancellationToken cancellationToken = default) =>
         SendAsync(new object[] { "set_property", "playlist-pos", pos }, cancellationToken);

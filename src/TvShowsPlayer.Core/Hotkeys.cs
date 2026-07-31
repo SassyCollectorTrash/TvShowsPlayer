@@ -52,12 +52,57 @@ public static class Hotkeys
     private const uint VkR = 0x52;
     private const uint VkN = 0x4E;
 
+    /// <summary>Набор модификаторов, который пользователь выбирает в настройках —
+    /// на случай конфликта комбинаций с другой программой.</summary>
+    public static readonly IReadOnlyList<string> ModifierChoices = new[]
+    {
+        "Ctrl+Alt", "Ctrl+Shift", "Ctrl+Shift+Alt", "Alt+Shift", "Win+Alt",
+    };
+
+    /// <summary>Разобрать выбранный набор («Ctrl+Alt»); неизвестное — Ctrl+Alt.</summary>
+    public static HotkeyModifiers ParseModifiers(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return HotkeyModifiers.Control | HotkeyModifiers.Alt;
+
+        var mods = HotkeyModifiers.None;
+        foreach (var part in text.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            mods |= part.ToLowerInvariant() switch
+            {
+                "ctrl" or "control" => HotkeyModifiers.Control,
+                "alt" => HotkeyModifiers.Alt,
+                "shift" => HotkeyModifiers.Shift,
+                "win" => HotkeyModifiers.Win,
+                _ => HotkeyModifiers.None,
+            };
+        }
+
+        return mods == HotkeyModifiers.None ? HotkeyModifiers.Control | HotkeyModifiers.Alt : mods;
+    }
+
+    /// <summary>Привязки с пользовательским набором модификаторов (dev — плюс Shift,
+    /// чтобы не спорить с боевым каналом).</summary>
+    public static IReadOnlyList<HotkeyBinding> ForMode(HotkeyMode mode, string? modifiers)
+    {
+        var mods = ParseModifiers(modifiers);
+        if (mode == HotkeyMode.Dev)
+            mods |= HotkeyModifiers.Shift;
+
+        return Build(mods);
+    }
+
     public static IReadOnlyList<HotkeyBinding> ForMode(HotkeyMode mode)
     {
         var mods = HotkeyModifiers.Control | HotkeyModifiers.Alt;
         if (mode == HotkeyMode.Dev)
             mods |= HotkeyModifiers.Shift;
 
+        return Build(mods);
+    }
+
+    private static IReadOnlyList<HotkeyBinding> Build(HotkeyModifiers mods)
+    {
         return new[]
         {
             new HotkeyBinding(1, mods, VkSpace, HotkeyAction.Pause),

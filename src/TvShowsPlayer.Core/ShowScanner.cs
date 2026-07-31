@@ -19,7 +19,10 @@ public static class ShowScanner
     /// <paramref name="excluded"/> — имена сериалов вне карусели (качаются/неполные;
     /// без регистра, с тримом). Зеркало Python <c>scan_shows(root, exclude)</c>.
     /// </summary>
-    public static IReadOnlyList<Show> Scan(string root, IReadOnlyCollection<string>? excluded = null)
+    /// <param name="settleAfter">Сколько файл должен пролежать без изменений, чтобы
+    /// попасть в эфир (защита от недокачанных серий). <c>null</c> — не проверять.</param>
+    public static IReadOnlyList<Show> Scan(
+        string root, IReadOnlyCollection<string>? excluded = null, TimeSpan? settleAfter = null)
     {
         // Библиотека не указана / папка не существует (свежая установка) → пусто, не падаем.
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
@@ -27,6 +30,7 @@ public static class ShowScanner
 
         var excludeSet = BuildExcludeSet(excluded);
         var shows = new List<Show>();
+        var nowUtc = DateTime.UtcNow;
 
         foreach (var showDir in Directory.EnumerateDirectories(root).OrderBy(NameKey))
         {
@@ -34,7 +38,7 @@ public static class ShowScanner
             if (excludeSet.Contains(name))
                 continue;   // временно вне канала
 
-            var episodes = GatherEpisodes(showDir);
+            var episodes = GatherEpisodes(showDir, settleAfter, nowUtc);
             if (episodes.Count > 0)
                 shows.Add(new Show(name, episodes));
         }
@@ -58,11 +62,16 @@ public static class ShowScanner
     }
 
     /// <summary>Рекурсивно собрать видеофайлы сериала и упорядочить их по показу.</summary>
-    private static IReadOnlyList<string> GatherEpisodes(string showDir)
+    private static IReadOnlyList<string> GatherEpisodes(string showDir, TimeSpan? settleAfter, DateTime nowUtc)
     {
-        var files = Directory
-            .EnumerateFiles(showDir, "*", SearchOption.AllDirectories)
-            .Where(f => VideoExtensions.Contains(Path.GetExtension(f)))
+        // DirectoryInfo (а не Directory): даты изменения приезжают вместе с перечислением,
+        // без отдельного обращения к диску на каждый файл.
+        var files = new DirectoryInfo(showDir)
+            .EnumerateFiles("*", SearchOption.AllDirectories)
+            .Where(f => VideoExtensions.Contains(f.Extension))
+            .Where(f => settleAfter is not TimeSpan quiet
+                        || LibraryReadiness.IsSettled(f.FullName, f.LastWriteTimeUtc, nowUtc, quiet))
+            .Select(f => f.FullName)
             .ToList();
 
         // Порядок считаем по путям ОТНОСИТЕЛЬНО папки сериала (как в Python): так

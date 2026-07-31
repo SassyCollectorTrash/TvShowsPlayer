@@ -14,6 +14,10 @@ public sealed record ChannelBuildOptions
 
     /// <summary>Пересобрать даже если состав не менялся (кнопка «Пересобрать»).</summary>
     public bool Force { get; init; }
+
+    /// <summary>Сколько файл должен пролежать без изменений, чтобы попасть в эфир
+    /// (защита от недокачанных серий). <c>null</c> — не проверять.</summary>
+    public TimeSpan? SettleAfter { get; init; }
 }
 
 /// <summary>Итог сборки.</summary>
@@ -46,7 +50,7 @@ public static class ChannelBuilder
             return new ChannelBuildResult { Rebuilt = false, LibraryMissing = true };
 
         var shows = ShowOrdering.Apply(
-            ShowScanner.Scan(options.Root, options.ExcludedShows), options.ShowOrder);
+            ShowScanner.Scan(options.Root, options.ExcludedShows, options.SettleAfter), options.ShowOrder);
 
         // В сигнатуру входят и параметры карусели: иначе смена «окна»/«шага» в
         // настройках не пересобирала бы плейлист при перезапуске.

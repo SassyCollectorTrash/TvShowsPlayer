@@ -152,7 +152,38 @@
             <TextBox Grid.Column="0" x:Name="CartoonsRootBox" Text="{Binding CartoonsRoot, Mode=TwoWay}" />
             <Button Grid.Column="1" Content="Обзор…" Click="OnBrowseCartoons" Margin="8,0,0,0" />
           </Grid>
+          <TextBlock Classes="label" Text="ПРОВЕРЯТЬ НОВЫЕ СЕРИАЛЫ, МИН (0 — НЕ ПРОВЕРЯТЬ)" />
+          <NumericUpDown Value="{Binding AutoRefreshMinutes, Mode=TwoWay}" Minimum="0" Maximum="720" Increment="5" />
+          <TextBlock Classes="label" Text="ЖДАТЬ ПОСЛЕ ЗАГРУЗКИ, МИН" />
+          <NumericUpDown Value="{Binding SettleMinutes, Mode=TwoWay}" Minimum="0" Maximum="240" Increment="5" />
+          <TextBlock Text="Серии, которые ещё качаются, в эфир не попадают: файл должен полежать без изменений."
+                     Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
         </StackPanel>
+      </TabItem>
+
+      <TabItem Header="Библиотека">
+        <DockPanel Margin="28,24">
+          <TextBlock DockPanel.Dock="Top" Classes="section" Text="Как распознаны серии" />
+          <TextBlock DockPanel.Dock="Top" Foreground="#949ba4" FontSize="12" TextWrapping="Wrap"
+                     Margin="0,0,0,10"
+                     Text="Проверь, если серии идут не в том порядке: здесь видно, по какой схеме определён номер серии и где сезон в имени файла спорит с папкой." />
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+            <Button Classes="accent" Content="Проверить" Click="OnInspectLibrary" />
+            <TextBlock x:Name="LibraryStatus" Foreground="#949ba4" VerticalAlignment="Center" />
+          </StackPanel>
+          <ListBox x:Name="LibraryList" Background="#2b2d31">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Margin="2,4" Spacing="2">
+                  <TextBlock Text="{Binding Title}" Foreground="#f2f3f5" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Details}" Foreground="#b5bac1" FontSize="12" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Warning}" Foreground="#f0b232" FontSize="12"
+                             TextWrapping="Wrap" IsVisible="{Binding HasWarning}" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
       </TabItem>
 
       <TabItem Header="Карусель">
@@ -185,6 +216,12 @@
           </ComboBox>
           <CheckBox x:Name="AutostartBox" Content="Запускать при входе в систему"
                     Click="OnAutostartToggled" Margin="0,20,0,0" />
+          <TextBlock Classes="label" Text="ГОРЯЧИЕ КЛАВИШИ" />
+          <CheckBox IsChecked="{Binding HotkeysEnabled, Mode=TwoWay}" Content="Включены" Margin="0,0,0,6" />
+          <ComboBox x:Name="HotkeyModifiersBox" HorizontalAlignment="Left" MinWidth="200"
+                    SelectionChanged="OnHotkeyModifiersChanged" />
+          <TextBlock Text="Если комбинацию занимает другая программа — выбери другой набор. Применится после перезапуска приложения."
+                     Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
         </StackPanel>
       </TabItem>
 

@@ -31,6 +31,9 @@ public partial class App : Application
     private string _configPath = string.Empty;
     private string _configDir = string.Empty;
     private Mutex? _instanceLock;
+    private DispatcherTimer? _libraryTimer;
+    private DispatcherTimer? _volumeSaveTimer;
+    private bool _refreshingLibrary;
     private bool _callMuted;
     private bool _shuttingDown;
 
@@ -145,7 +148,7 @@ public partial class App : Application
                 .FirstOrDefault(i => i.ToggleType == NativeMenuItemToggleType.CheckBox);
         }
 
-        StartHotkeys();
+        StartHotkeys(config);
 
         // Трей и хоткеи уже живут — теперь эфир. Если библиотеки нет, приложение
         // ОСТАЁТСЯ в трее и открывает настройки: раньше mpv с пустым плейлистом
@@ -154,7 +157,10 @@ public partial class App : Application
         {
             AppLog.Write("библиотека не указана или недоступна — эфир не запущен, открываю настройки");
             OnSettings(this, EventArgs.Empty);
+            return;
         }
+
+        StartLibraryWatch(config);   // новые сериалы подхватываются сами
     }
 
     /// <summary>
@@ -176,6 +182,7 @@ public partial class App : Application
             Window = config.Window,
             Step = config.Step,
             CapRotations = config.CapRotations,
+            SettleAfter = TimeSpan.FromMinutes(config.SettleMinutes),
         });
 
         // Плейлиста нет вообще (первый запуск без библиотеки) — запускать нечего.
@@ -275,8 +282,14 @@ public partial class App : Application
     // Скрытое окно (1×1, off-screen) — даёт HWND для RegisterHotKey и приёма WM_HOTKEY.
     // dev-режим = Ctrl+Alt+SHIFT+клавиша, чтобы не конфликтовать с хоткеями живого
     // AHK-канала (у него те же комбо без Shift).
-    private void StartHotkeys()
+    private void StartHotkeys(AppConfig config)
     {
+        if (!config.HotkeysEnabled)
+        {
+            AppLog.Write("горячие клавиши выключены в настройках");
+            return;
+        }
+
         _hotkeyWindow = new Window
         {
             Width = 1,
@@ -298,14 +311,15 @@ public partial class App : Application
 
         // Dev = Ctrl+Alt+Shift+… (сосуществование с живым AHK), Prod = боевые комбо.
         var hotkeyMode = _mode == ChannelMode.Production ? HotkeyMode.Production : HotkeyMode.Dev;
-        var bindings = Hotkeys.ForMode(hotkeyMode);
+        var bindings = Hotkeys.ForMode(hotkeyMode, config.HotkeyModifiers);
         _hotkeys = new GlobalHotkeys(hwnd, bindings, OnHotkey);
         _hotkeys.Register();
 
         // Комбо мог занять другой программой — молчать об этом нельзя, иначе
         // «клавиши не работают» без единой подсказки.
         if (_hotkeys.RegisteredCount < bindings.Count)
-            AppLog.Write($"хоткеи: занято другими программами {bindings.Count - _hotkeys.RegisteredCount} из {bindings.Count}");
+            AppLog.Write($"хоткеи ({config.HotkeyModifiers}): занято другими программами " +
+                         $"{bindings.Count - _hotkeys.RegisteredCount} из {bindings.Count} — смени набор в настройках");
     }
 
     private IntPtr OnWndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -319,8 +333,8 @@ public partial class App : Application
         switch (action)
         {
             case HotkeyAction.Pause: _ = _controller?.PauseAsync(); break;
-            case HotkeyAction.VolumeUp: _ = _controller?.VolumeAsync(5); break;
-            case HotkeyAction.VolumeDown: _ = _controller?.VolumeAsync(-5); break;
+            case HotkeyAction.VolumeUp: ChangeVolume(5); break;
+            case HotkeyAction.VolumeDown: ChangeVolume(-5); break;
             case HotkeyAction.NextEpisode: _ = _controller?.NextEpisodeAsync(); break;
             case HotkeyAction.ToggleMute: ToggleCallMute(); break;
             case HotkeyAction.Resync: _ = _controller?.ResyncAsync(); break;
@@ -386,9 +400,54 @@ public partial class App : Application
     // ---- обработчики пунктов меню (App.axaml) ----
     private void OnPausePlay(object? sender, EventArgs e) => _ = _controller?.PauseAsync();
 
-    private void OnVolumeUp(object? sender, EventArgs e) => _ = _controller?.VolumeAsync(5);
+    private void OnVolumeUp(object? sender, EventArgs e) => ChangeVolume(5);
 
-    private void OnVolumeDown(object? sender, EventArgs e) => _ = _controller?.VolumeAsync(-5);
+    private void OnVolumeDown(object? sender, EventArgs e) => ChangeVolume(-5);
+
+    // Громкость должна пережить перезапуск: mpv.conf генерируется из конфига, поэтому
+    // подкрученный уровень запоминаем. Пишем не на каждый шаг, а спустя паузу —
+    // пользователь обычно жмёт «тише» несколько раз подряд.
+    private void ChangeVolume(int delta)
+    {
+        _ = _controller?.VolumeAsync(delta);
+
+        _volumeSaveTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _volumeSaveTimer.Stop();
+        _volumeSaveTimer.Tick -= OnVolumeSaveTick;
+        _volumeSaveTimer.Tick += OnVolumeSaveTick;
+        _volumeSaveTimer.Start();
+    }
+
+    private void OnVolumeSaveTick(object? sender, EventArgs e)
+    {
+        _volumeSaveTimer?.Stop();
+        _ = SaveVolumeAsync();
+    }
+
+    private async Task SaveVolumeAsync()
+    {
+        try
+        {
+            if (_controller is null || string.IsNullOrEmpty(_configPath))
+                return;
+
+            var volume = (int)Math.Round(await _controller.GetVolumeAsync());
+            if (volume <= 0)
+                return;
+
+            var config = AppConfig.Load(_configPath);
+            if (config.Volume == volume)
+                return;
+
+            config.Volume = volume;
+            config.Save(_configPath);
+            AppLog.Write($"громкость запомнена: {volume}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"не удалось запомнить громкость: {ex.Message}");
+        }
+    }
 
     private void OnNextEpisode(object? sender, EventArgs e) => _ = _controller?.NextEpisodeAsync();
 
@@ -401,6 +460,120 @@ public partial class App : Application
     private void OnToggleCall(object? sender, EventArgs e) => ToggleCallMute();
 
     private void OnRestartChannel(object? sender, EventArgs e) => RestartChannel();
+
+    private void OnRefreshLibrary(object? sender, EventArgs e) => _ = RefreshLibraryAsync(manual: true);
+
+    // Периодическая проверка библиотеки: скачанные сериалы попадают в эфир сами,
+    // без похода в настройки. Недокачанные серии отсекает «выдержка» (SettleMinutes).
+    private void StartLibraryWatch(AppConfig config)
+    {
+        if (config.AutoRefreshMinutes <= 0)
+            return;
+
+        _libraryTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(config.AutoRefreshMinutes) };
+        _libraryTimer.Tick += (_, _) => _ = RefreshLibraryAsync(manual: false);
+        _libraryTimer.Start();
+    }
+
+    /// <summary>
+    /// Пересобрать канал, если состав библиотеки изменился, и подхватить его «на лету»,
+    /// вернувшись на ту же секунду той же серии (иначе обновление отматывало бы эфир).
+    /// </summary>
+    private async Task RefreshLibraryAsync(bool manual)
+    {
+        if (_refreshingLibrary)
+            return;
+        _refreshingLibrary = true;
+
+        try
+        {
+            var config = AppConfig.Load(_configPath);
+            var playlistPath = Path.Combine(_configDir, "channel.m3u");
+            var statePath = ChannelPaths.ResolveStatePath(_configDir);
+
+            // Где сейчас эфир — чтобы вернуться ровно сюда.
+            var currentPath = _controller is null ? null : await _controller.GetCurrentPathAsync();
+            var timePos = _controller is null ? 0 : await _controller.GetTimePosAsync();
+
+            if (currentPath is not null && ShowAndRel(currentPath, config.CartoonsRoot) is { } cur)
+            {
+                var st = ChannelState.Load(statePath);
+                st.Current = cur.Show;
+                st.Shows[cur.Show] = cur.Rel;
+                st.Save(statePath);
+            }
+
+            // Сканирование библиотеки — на фоновом потоке: тысячи файлов не должны
+            // подвешивать интерфейс.
+            var result = await Task.Run(() => ChannelBuilder.Build(new ChannelBuildOptions
+            {
+                Root = config.CartoonsRoot,
+                PlaylistPath = playlistPath,
+                StatePath = statePath,
+                ExcludedShows = config.ExcludedShows,
+                ShowOrder = config.ShowOrder,
+                Window = config.Window,
+                Step = config.Step,
+                CapRotations = config.CapRotations,
+                SettleAfter = TimeSpan.FromMinutes(config.SettleMinutes),
+            }));
+
+            if (result.LibraryMissing)
+            {
+                AppLog.Write("обновление библиотеки: папка недоступна — пропускаем");
+                if (manual)
+                    AppLog.ShowWarning("Папка с мультфильмами недоступна.\n\nПроверь, подключён ли диск.");
+                return;
+            }
+
+            if (!result.Rebuilt)
+            {
+                AppLog.Write("обновление библиотеки: изменений нет");
+                return;
+            }
+
+            AppLog.Write($"обновление библиотеки: состав изменился → {result.ShowCount} сериалов, {result.PlaylistLength} записей");
+
+            if (_controller is null)
+                return;
+
+            var pos = ChannelState.Load(statePath).PlaylistPos;
+            await _controller.ReloadPlaylistAsync(playlistPath);
+            await _controller.SetPlaylistPosAsync(pos);
+            if (timePos > 1)
+                await _controller.SeekAsync(timePos);   // возвращаемся на ту же секунду
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"обновление библиотеки не удалось: {ex.Message}");
+        }
+        finally
+        {
+            _refreshingLibrary = false;
+        }
+    }
+
+    // Полный путь → (сериал, путь относительно папки сериала) под корнем библиотеки.
+    private static (string Show, string Rel)? ShowAndRel(string path, string root)
+    {
+        if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(root))
+            return null;
+
+        var prefix = root.Replace('/', '\\');
+        if (!prefix.EndsWith('\\'))
+            prefix += "\\";
+
+        var p = path.Replace('/', '\\');
+        if (!p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var tail = p[prefix.Length..];
+        var slash = tail.IndexOf('\\');
+        if (slash <= 0 || slash >= tail.Length - 1)
+            return null;
+
+        return (tail[..slash], tail[(slash + 1)..]);
+    }
 
     // Общий тумблер «Режим созвона» для пункта трея И хоткея — одно состояние,
     // одна галочка (CallModeItem объявлен в App.axaml), чтобы клавиша и меню совпадали.
@@ -458,6 +631,8 @@ public partial class App : Application
 
     private void Cleanup()
     {
+        _libraryTimer?.Stop();
+        _volumeSaveTimer?.Stop();
         _hotkeys?.Dispose();   // снимает RegisterHotKey
         if (_wndProcHook is not null && _hotkeyWindow is not null)
             Win32Properties.RemoveWndProcHookCallback(_hotkeyWindow, _wndProcHook);

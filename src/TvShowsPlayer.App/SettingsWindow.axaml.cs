@@ -36,6 +36,8 @@ public partial class SettingsWindow : Window
     private TextBlock _nowPlaying = null!;
     private CheckBox _preserveCurrent = null!;
     private TextBlock _playlistStatus = null!;
+    private ListBox _libraryList = null!;
+    private TextBlock _libraryStatus = null!;
     private TextBlock _status = null!;
     private TextBlock _versionText = null!;
     private Button _updateButton = null!;
@@ -84,6 +86,15 @@ public partial class SettingsWindow : Window
         // иначе пользователю негде запустить канал после выбора папки.
         var startButton = this.FindControl<Button>("StartChannelButton")!;
         startButton.IsVisible = _controller is null && _startChannel is not null;
+
+        _libraryList = this.FindControl<ListBox>("LibraryList")!;
+        _libraryStatus = this.FindControl<TextBlock>("LibraryStatus")!;
+
+        var modifiersBox = this.FindControl<ComboBox>("HotkeyModifiersBox")!;
+        modifiersBox.ItemsSource = Hotkeys.ModifierChoices;
+        modifiersBox.SelectedItem = Hotkeys.ModifierChoices.FirstOrDefault(
+            m => string.Equals(m, _config.HotkeyModifiers, StringComparison.OrdinalIgnoreCase))
+            ?? Hotkeys.ModifierChoices[0];
         Closed += (_, _) => _closing.Cancel();   // не дописываем в контролы закрытого окна
 
         _ = PopulateAudioDevicesAsync();
@@ -98,6 +109,51 @@ public partial class SettingsWindow : Window
     {
         if (sender is CheckBox box)
             Autostart.Set(box.IsChecked == true);
+    }
+
+    private void OnHotkeyModifiersChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { SelectedItem: string set })
+            _config.HotkeyModifiers = set;
+    }
+
+    // ---- диагностика библиотеки: как распознались серии ----
+    private async void OnInspectLibrary(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _libraryStatus.Text = "Читаю библиотеку…";
+            var root = _config.CartoonsRoot;
+
+            var reports = await Task.Run(() =>
+            {
+                var shows = ShowScanner.Scan(root);
+                return DryRun.Build(root, shows);
+            });
+
+            if (_closing.IsCancellationRequested)
+                return;
+
+            _libraryList.ItemsSource = reports.Select(r => new LibraryRow
+            {
+                Title = $"{r.Name} — {r.EpisodeCount} серий · {r.DetectionLabel}",
+                Details = string.Join(" · ", r.FirstEpisodes)
+                          + (r.LastEpisode is null ? string.Empty : $" … {r.LastEpisode}"),
+                Warning = r.Anomalies.Count == 0
+                    ? string.Empty
+                    : "Сезон в имени файла не совпадает с папкой: "
+                      + string.Join(", ", r.Anomalies.Take(3)
+                          .Select(a => $"{a.FileName} (S{a.SeasonInName:00} вместо S{a.SeasonFolder:00})")),
+            }).ToList();
+
+            _libraryStatus.Text = reports.Count == 0
+                ? "Сериалы не найдены — проверь папку на вкладке «Пути»."
+                : $"Сериалов: {reports.Count}, серий: {reports.Sum(r => r.EpisodeCount)}.";
+        }
+        catch (Exception ex)
+        {
+            _libraryStatus.Text = $"Не удалось прочитать: {ex.Message}";
+        }
     }
 
     // ---- проверка обновлений ----
@@ -570,6 +626,15 @@ public sealed class ShowRow
 {
     public string Name { get; init; } = string.Empty;
     public bool IsIncluded { get; set; } = true;
+}
+
+/// <summary>Строка диагностики библиотеки: сериал, как распознан, предупреждение.</summary>
+public sealed class LibraryRow
+{
+    public string Title { get; init; } = string.Empty;
+    public string Details { get; init; } = string.Empty;
+    public string Warning { get; init; } = string.Empty;
+    public bool HasWarning => Warning.Length > 0;
 }
 
 /// <summary>Элемент очереди «Далее»: индекс в плейлисте и подпись.</summary>

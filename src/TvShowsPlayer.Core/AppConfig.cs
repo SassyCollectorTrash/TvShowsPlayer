@@ -20,6 +20,11 @@ public sealed class AppConfig
     // Отсутствующие в списке сериалы идут следом в алфавитном порядке.
     public List<string> ShowOrder { get; set; } = new();
 
+    // Библиотека: как часто сама подхватывает новые сериалы (0 — не проверять) и
+    // сколько файл должен пролежать без изменений, чтобы считаться докачанным.
+    public int AutoRefreshMinutes { get; set; } = 15;
+    public int SettleMinutes { get; set; } = 10;
+
     // Карусель
     public int Window { get; set; } = 4;
     public int Step { get; set; } = 2;
@@ -31,6 +36,11 @@ public sealed class AppConfig
     // 0 = основной монитор. Дефолт намеренно 0: на машине с одним экраном
     // номер 1 не существует, и канал уезжал бы «в никуда».
     public int FsScreen { get; set; }
+
+    // Горячие клавиши: набор модификаторов (на случай конфликта с другой программой)
+    // и общий выключатель.
+    public string HotkeyModifiers { get; set; } = "Ctrl+Alt";
+    public bool HotkeysEnabled { get; set; } = true;
 
     // OSD
     public bool ClockEnabled { get; set; } = true;
