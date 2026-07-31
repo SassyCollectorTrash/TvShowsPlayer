@@ -13,7 +13,7 @@ public static class MpvConfig
     public static string Generate(AppConfig config)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# Сгенерировано приложением JETIX — меняй настройки в окне, не здесь.");
+        sb.AppendLine($"# Сгенерировано приложением {Branding.AppName} — меняй настройки в окне, не здесь.");
         sb.AppendLine("fullscreen=yes");
         sb.AppendLine($"fs-screen={config.FsScreen}");
         sb.AppendLine("loop-playlist=inf");
@@ -23,7 +23,7 @@ public static class MpvConfig
         sb.AppendLine("border=no");
         sb.AppendLine("cursor-autohide=always");
         sb.AppendLine("input-default-bindings=no");   // киоск: не реагировать на клавиши
-        sb.AppendLine("title=jetix");
+        sb.AppendLine($"title={Branding.AppName}");
         sb.AppendLine("sub-auto=no");
         sb.AppendLine("sid=no");
         sb.AppendLine("audio-file-paths=Rus Sound;audio");   // внешняя рус-озвучка

@@ -14,7 +14,7 @@ public enum ChannelMode
 /// Какие Lua-скрипты класть в config-dir mpv для данного режима. Правило
 /// изоляции закладки вынесено сюда явно: dev-набор НИКОГДА не содержит
 /// <c>resume.lua</c>, поэтому dev-mpv не пишет в общий
-/// <c>jetix-channel-state.json</c> и не портит позицию живого канала.
+/// <c>localtv-channel-state.json</c> и не портит позицию живого канала.
 /// </summary>
 public static class ChannelScripts
 {

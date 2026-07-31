@@ -6,7 +6,7 @@
   </Application.Styles>
   <TrayIcon.Icons>
     <TrayIcons>
-      <TrayIcon ToolTipText="JETIX — мультканал (dev)" IsVisible="False">
+      <TrayIcon ToolTipText="LocalTV — мультканал (dev)" IsVisible="False">
         <TrayIcon.Menu>
           <NativeMenu>
             <NativeMenuItem Header="Пауза / Пуск" Click="OnPausePlay" />

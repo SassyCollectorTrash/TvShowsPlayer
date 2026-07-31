@@ -5,7 +5,7 @@ namespace TvShowsPlayer.Core;
 
 /// <summary>
 /// Боевое соединение с mpv по именованному каналу Windows
-/// (mpv: input-ipc-server=\\.\pipe\jetixmpv). Это IO-граница: юнит-тестами не
+/// (mpv: input-ipc-server=\\.\pipe\localtvmpv). Это IO-граница: юнит-тестами не
 /// покрыта намеренно — логика протокола живёт и тестируется в
 /// <see cref="MpvIpcClient"/> через <see cref="IMpvConnection"/>; здесь только
 /// тонкая обвязка над <see cref="NamedPipeClientStream"/> со строчным
@@ -13,7 +13,7 @@ namespace TvShowsPlayer.Core;
 /// </summary>
 public sealed class NamedPipeMpvConnection : IMpvConnection
 {
-    public const string DefaultPipeName = "jetixmpv";
+    public const string DefaultPipeName = Branding.PipeName;
 
     private readonly NamedPipeClientStream _pipe;
     private readonly StreamReader _reader;

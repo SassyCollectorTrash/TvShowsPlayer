@@ -5,6 +5,8 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Версия приложения: показывается в Настройках и сравнивается с последним релизом. -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

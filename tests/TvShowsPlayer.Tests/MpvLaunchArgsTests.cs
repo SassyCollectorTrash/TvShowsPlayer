@@ -10,7 +10,7 @@ public class MpvLaunchArgsTests
     {
         ConfigDir = @"D:\dev-config",
         Playlist = @"C:\Media\channel.m3u",
-        PipePath = @"\\.\pipe\jetixmpv-dev",
+        PipePath = @"\\.\pipe\localtvmpv-dev",
     };
 
     [Fact]
@@ -19,7 +19,7 @@ public class MpvLaunchArgsTests
         var args = MpvLaunchArgs.Build(DevOptions());
 
         args.Should().Contain(@"--config-dir=D:\dev-config");
-        args.Should().Contain(@"--input-ipc-server=\\.\pipe\jetixmpv-dev");
+        args.Should().Contain(@"--input-ipc-server=\\.\pipe\localtvmpv-dev");
     }
 
     [Fact]

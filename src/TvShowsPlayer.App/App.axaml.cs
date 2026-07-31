@@ -56,11 +56,24 @@ public partial class App : Application
         var isProd = _mode == ChannelMode.Production;
 
         // Dev: dev-config рядом с exe (оконный, свой pipe, без resume) — не трогает живой канал.
-        // Prod: %LOCALAPPDATA%\Jetix — вне папки приложения, чтобы обновление (замена
+        // Prod: %LOCALAPPDATA%\LocalTV — вне папки приложения, чтобы обновление (замена
         // папки/распаковка новой версии) НЕ затронуло настройки и прогресс просмотра.
-        var configDir = isProd
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jetix")
-            : Path.Combine(appDir, "dev-config");
+        string configDir;
+        if (isProd)
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            LegacyConfigMigration.Run(localAppData);   // разовый перенос со старого имени (Jetix → LocalTV)
+            Autostart.MigrateLegacyName();             // и автозапуск-ключ реестра
+            var newDir = Path.Combine(localAppData, Branding.AppName);
+            var legacyDir = Path.Combine(localAppData, Branding.LegacyAppName);
+            // Если перенос папки не удался (напр. файл занят) — не теряем прогресс:
+            // продолжаем со старой папкой, перенос повторится при следующем старте.
+            configDir = Directory.Exists(newDir) || !Directory.Exists(legacyDir) ? newDir : legacyDir;
+        }
+        else
+        {
+            configDir = Path.Combine(appDir, "dev-config");
+        }
         _configPath = Path.Combine(configDir, "appconfig.json");
         var config = AppConfig.Load(_configPath);
         ResolveMpvPath(config, appDir);   // бандл-mpv, если путь в конфиге не существует
@@ -78,7 +91,7 @@ public partial class App : Application
         {
             Root = config.CartoonsRoot,
             PlaylistPath = playlist,
-            StatePath = Path.Combine(configDir, "jetix-channel-state.json"),
+            StatePath = ResolveStatePath(configDir),
             ExcludedShows = config.ExcludedShows,
             ShowOrder = config.ShowOrder,
             Window = config.Window,
@@ -86,7 +99,7 @@ public partial class App : Application
             CapRotations = config.CapRotations,
         });
 
-        var pipeName = isProd ? "jetixmpv" : "jetixmpv-dev";
+        var pipeName = isProd ? Branding.PipeName : Branding.PipeNameDev;
         var options = new MpvLaunchOptions
         {
             ConfigDir = configDir,
@@ -139,7 +152,7 @@ public partial class App : Application
             SystemDecorations = SystemDecorations.None,
             WindowStartupLocation = WindowStartupLocation.Manual,
             Position = new PixelPoint(-32000, -32000),
-            Title = "JETIX hotkeys",
+            Title = $"{Branding.AppName} hotkeys",
         };
         _hotkeyWindow.Show();
 
@@ -176,11 +189,23 @@ public partial class App : Application
         }
     }
 
-    // Режим: env JETIX_MODE перекрывает; иначе Debug→Dev, Release→Prod. Гарантия —
+    // Путь к файлу состояния: каноничный, а если после переименования остался только
+    // старый — берём его (миграция файла повторится позже). Прогрессу не даём потеряться.
+    private static string ResolveStatePath(string configDir)
+    {
+        var canonical = Path.Combine(configDir, Branding.StateFileName);
+        if (File.Exists(canonical))
+            return canonical;
+
+        var legacy = Path.Combine(configDir, Branding.LegacyStateFileName);
+        return File.Exists(legacy) ? legacy : canonical;
+    }
+
+    // Режим: env LOCALTV_MODE перекрывает; иначе Debug→Dev, Release→Prod. Гарантия —
     // локальные Debug-запуски по умолчанию Dev и не трогают живой AHK-канал.
     private static ChannelMode ResolveMode()
     {
-        var env = Environment.GetEnvironmentVariable("JETIX_MODE");
+        var env = Environment.GetEnvironmentVariable("LOCALTV_MODE");
         if (string.Equals(env, "prod", StringComparison.OrdinalIgnoreCase))
             return ChannelMode.Production;
         if (string.Equals(env, "dev", StringComparison.OrdinalIgnoreCase))

@@ -16,7 +16,7 @@ public class AppConfigTests
         c.CapRotations.Should().Be(200);
         c.Volume.Should().Be(70);
         c.FsScreen.Should().Be(1);
-        c.ChannelName.Should().Be("JETIX");
+        c.ChannelName.Should().Be("LocalTV");
         c.ExcludedShows.Should().BeEmpty();
     }
 

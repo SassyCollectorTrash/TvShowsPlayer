@@ -10,9 +10,9 @@ namespace TvShowsPlayer.App;
 public sealed class MpvController : IDisposable
 {
     private const string ScriptMessage = "script-message";
-    private const string NextShowMessage = "jetix-next-show";
-    private const string ResyncMessage = "jetix-resync";
-    private const string NowMessage = "jetix-now";
+    private const string NextShowMessage = "localtv-next-show";
+    private const string ResyncMessage = "localtv-resync";
+    private const string NowMessage = "localtv-now";
     private const string SetProperty = "set_property";
     private const string MuteProperty = "mute";
 

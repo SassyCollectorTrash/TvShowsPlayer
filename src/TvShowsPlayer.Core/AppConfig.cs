@@ -35,7 +35,7 @@ public sealed class AppConfig
     public double SplashSeconds { get; set; } = 4;
     public double BumperSeconds { get; set; } = 3;
     public double PlashkaSeconds { get; set; } = 5;
-    public string ChannelName { get; set; } = "JETIX";
+    public string ChannelName { get; set; } = Branding.AppName;
     public bool RetroTheme { get; set; }
 
     private static readonly JsonSerializerOptions JsonOptions = new()

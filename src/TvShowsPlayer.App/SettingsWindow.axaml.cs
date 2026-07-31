@@ -19,7 +19,7 @@ namespace TvShowsPlayer.App;
 /// </summary>
 public partial class SettingsWindow : Window
 {
-    private const string DragFormat = "jetix.show";
+    private const string DragFormat = "localtv.show";
 
     private readonly AppConfig _config;
     private readonly string _configPath;
@@ -36,6 +36,13 @@ public partial class SettingsWindow : Window
     private CheckBox _preserveCurrent = null!;
     private TextBlock _playlistStatus = null!;
     private TextBlock _status = null!;
+    private TextBlock _versionText = null!;
+    private Button _updateButton = null!;
+    private string? _releaseUrl;
+
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(6) };
+    private static readonly Version AppVersion =
+        typeof(SettingsWindow).Assembly.GetName().Version ?? new Version(1, 0, 0);
 
     private ShowRow? _dragItem;
     private ShowRow? _draggingRow;
@@ -63,17 +70,75 @@ public partial class SettingsWindow : Window
         _status = this.FindControl<TextBlock>("StatusText")!;
         _autostartBox = this.FindControl<CheckBox>("AutostartBox")!;
         _autostartBox.IsChecked = Autostart.IsEnabled();
+        _versionText = this.FindControl<TextBlock>("VersionText")!;
+        _updateButton = this.FindControl<Button>("UpdateButton")!;
+        _versionText.Text = $"{Branding.AppName} v{AppVersion.ToString(3)}";
 
         PopulateAudioDevices();
         PopulateShows();
         SetupDragDrop();
         SetupAutoRefresh();
+
+        _ = CheckUpdatesAsync(silent: true);   // тихая проверка обновлений при открытии
     }
 
     private void OnAutostartToggled(object? sender, RoutedEventArgs e)
     {
         if (sender is CheckBox box)
             Autostart.Set(box.IsChecked == true);
+    }
+
+    // ---- проверка обновлений ----
+    private async void OnCheckUpdates(object? sender, RoutedEventArgs e) =>
+        await CheckUpdatesAsync(silent: false);
+
+    private void OnOpenReleases(object? sender, RoutedEventArgs e)
+    {
+        var url = _releaseUrl ?? Branding.ReleasesUrl;
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch
+        {
+            // браузер не открылся — не критично
+        }
+    }
+
+    private async Task CheckUpdatesAsync(bool silent)
+    {
+        try
+        {
+            if (!silent)
+                _status.Text = "Проверяю обновления…";
+
+            var info = await UpdateChecker.FetchLatestAsync(Http, Branding.RepoOwner, Branding.RepoName);
+            if (info is null)
+            {
+                if (!silent)
+                    _status.Text = "Не удалось проверить обновления";
+                return;
+            }
+
+            if (UpdateChecker.HasUpdate(AppVersion, info))
+            {
+                _releaseUrl = info.ReleaseUrl ?? Branding.ReleasesUrl;
+                _updateButton.Content = $"Скачать обновление v{info.Version.ToString(3)}";
+                _updateButton.IsVisible = true;
+                _status.Text = $"Доступна новая версия v{info.Version.ToString(3)}";
+            }
+            else
+            {
+                _updateButton.IsVisible = false;
+                if (!silent)
+                    _status.Text = "Установлена последняя версия";
+            }
+        }
+        catch
+        {
+            if (!silent)
+                _status.Text = "Не удалось проверить обновления";
+        }
     }
 
     // ---- сериалы: порядок (drag-drop / ↑↓) + «в канале» ----
@@ -272,7 +337,7 @@ public partial class SettingsWindow : Window
             ApplyShowConfig();
             var dir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
             var playlistPath = Path.Combine(dir, "channel.m3u");
-            var statePath = Path.Combine(dir, "jetix-channel-state.json");
+            var statePath = Path.Combine(dir, Branding.StateFileName);
 
             if (_preserveCurrent.IsChecked == true && _controller is not null)
             {

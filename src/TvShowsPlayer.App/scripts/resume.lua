@@ -23,8 +23,8 @@ local utils = require 'mp.utils'
 
 -- Состояние И лог — рядом с китом (config-dir mpv), НЕ в %APPDATA%.
 local kitdir = mp.command_native({ "expand-path", "~~/" }) or "."
-local state_file = kitdir .. "/jetix-channel-state.json"
-local log_file = kitdir .. "/jetix-resume.log"
+local state_file = kitdir .. "/localtv-channel-state.json"
+local log_file = kitdir .. "/localtv-resume.log"
 
 -- Старое расположение в %APPDATA% — только для РАЗОВОЙ миграции (если нового
 -- файла ещё нет, подхватим прежнюю закладку).

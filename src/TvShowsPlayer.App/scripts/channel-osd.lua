@@ -9,7 +9,7 @@
 local mp = require 'mp'
 local msg = require 'mp.msg'
 
-local CHANNEL = "JETIX"
+local CHANNEL = "LocalTV"
 local SPLASH_SEC = 4.0      -- длительность заставки-прогрева
 local BUMPER_SEC = 3.0      -- длительность бампера «ДАЛЕЕ»
 local PLASHKA_SEC = 5.0     -- длительность плашки серии
@@ -223,7 +223,7 @@ end
 -- Сторож рассинхрона: следим за avsync; если звук заметно «уплыл» от картинки —
 -- пишем короткую строку в лог И сами пересинхронизируем (самолечение 24/7-канала).
 -- Лог маленький: пишется только при реальном уплытии, не постоянно.
-local DESYNC_LOG = (os.getenv("APPDATA") or ".") .. "/jetix-desync.log"
+local DESYNC_LOG = (os.getenv("APPDATA") or ".") .. "/localtv-desync.log"
 local DESYNC_THRESH = 0.5    -- секунд: порог «звук уплыл»
 local resync_after = 0       -- авто-пересинхрон не чаще раза в минуту
 
@@ -245,9 +245,9 @@ local function watchdog()
 end
 
 mp.register_event("file-loaded", on_file_loaded)
-mp.register_script_message("jetix-next-show", next_show)
-mp.register_script_message("jetix-resync", resync_audio)
-mp.register_script_message("jetix-now", show_now)
+mp.register_script_message("localtv-next-show", next_show)
+mp.register_script_message("localtv-resync", resync_audio)
+mp.register_script_message("localtv-now", show_now)
 update_clock()
 mp.add_periodic_timer(15, update_clock)
 mp.add_periodic_timer(12, watchdog)
