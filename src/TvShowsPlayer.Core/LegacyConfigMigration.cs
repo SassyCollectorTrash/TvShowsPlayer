@@ -33,21 +33,34 @@ public static class LegacyConfigMigration
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 
         // 2. Файл состояния — к каноничному имени (внутри уже новой папки).
+        migrated |= RenameStateFile(newDir);
+
+        return migrated;
+    }
+
+    /// <summary>
+    /// Привести файл состояния в указанной папке к каноничному имени. Вызывается для
+    /// ФАКТИЧЕСКИ используемой config-dir: <c>resume.lua</c> всегда пишет каноничное
+    /// имя, поэтому при откате на старую папку файл обязан переименоваться и там —
+    /// иначе mpv не увидит прогресс и затрёт его пустым.
+    /// </summary>
+    public static bool RenameStateFile(string configDir)
+    {
         try
         {
-            if (Directory.Exists(newDir))
+            if (!Directory.Exists(configDir))
+                return false;
+
+            var legacyState = Path.Combine(configDir, Branding.LegacyStateFileName);
+            var newState = Path.Combine(configDir, Branding.StateFileName);
+            if (File.Exists(legacyState) && !File.Exists(newState))
             {
-                var legacyState = Path.Combine(newDir, Branding.LegacyStateFileName);
-                var newState = Path.Combine(newDir, Branding.StateFileName);
-                if (File.Exists(legacyState) && !File.Exists(newState))
-                {
-                    File.Move(legacyState, newState);
-                    migrated = true;
-                }
+                File.Move(legacyState, newState);
+                return true;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 
-        return migrated;
+        return false;
     }
 }

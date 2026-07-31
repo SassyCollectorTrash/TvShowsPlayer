@@ -15,6 +15,9 @@ public sealed record MpvLaunchOptions
     /// <summary>Корень библиотеки для channel-osd.lua; null — не передавать.</summary>
     public string? ChannelOsdRoot { get; init; }
 
+    /// <summary>Имя канала для заставки channel-osd.lua; null — оставить дефолтное.</summary>
+    public string? ChannelName { get; init; }
+
     /// <summary>true — fullscreen из mpv.conf; false — принудительно оконный.</summary>
     public bool Fullscreen { get; init; } = true;
 }
@@ -27,7 +30,7 @@ public static class MpvLaunchArgs
 {
     private const string ConfigDirFlag = "--config-dir=";
     private const string IpcServerFlag = "--input-ipc-server=";
-    private const string ScriptOptsFlag = "--script-opts=channelosd-root=";
+    private const string ScriptOptsFlag = "--script-opts=";
     private const string NoFullscreenFlag = "--fullscreen=no";
 
     public static IReadOnlyList<string> Build(MpvLaunchOptions options)
@@ -38,8 +41,16 @@ public static class MpvLaunchArgs
             IpcServerFlag + options.PipePath,
         };
 
+        // Все опции скриптов — одним --script-opts (пары через запятую), поэтому
+        // запятые из значений убираем: иначе mpv разберёт хвост как отдельную опцию.
+        var scriptOpts = new List<string>();
         if (!string.IsNullOrEmpty(options.ChannelOsdRoot))
-            args.Add(ScriptOptsFlag + options.ChannelOsdRoot);
+            scriptOpts.Add("channelosd-root=" + options.ChannelOsdRoot.Replace(",", string.Empty));
+        if (!string.IsNullOrEmpty(options.ChannelName))
+            scriptOpts.Add("channelosd-name=" + options.ChannelName.Replace(",", string.Empty));
+
+        if (scriptOpts.Count > 0)
+            args.Add(ScriptOptsFlag + string.Join(",", scriptOpts));
 
         if (!options.Fullscreen)
             args.Add(NoFullscreenFlag);

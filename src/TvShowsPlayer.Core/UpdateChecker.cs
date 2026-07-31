@@ -18,6 +18,9 @@ public static class UpdateChecker
         try
         {
             using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return null;   // TryGetProperty на массиве/строке бросает — до него не доходим
+
             if (!doc.RootElement.TryGetProperty("tag_name", out var tagEl)
                 || tagEl.ValueKind != JsonValueKind.String)
                 return null;
@@ -58,11 +61,11 @@ public static class UpdateChecker
             req.Headers.UserAgent.ParseAdd($"{Branding.AppName}-update-check");
             req.Headers.Accept.ParseAdd("application/vnd.github+json");
 
-            using var resp = await http.SendAsync(req, ct);
+            using var resp = await http.SendAsync(req, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
                 return null;
 
-            return Parse(await resp.Content.ReadAsStringAsync(ct));
+            return Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
         }
         catch
         {

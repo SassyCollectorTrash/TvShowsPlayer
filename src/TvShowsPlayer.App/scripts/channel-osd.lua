@@ -9,7 +9,7 @@
 local mp = require 'mp'
 local msg = require 'mp.msg'
 
-local CHANNEL = "LocalTV"
+local CHANNEL = mp.get_opt("channelosd-name") or "LocalTV"   -- имя канала из настроек
 local SPLASH_SEC = 4.0      -- длительность заставки-прогрева
 local BUMPER_SEC = 3.0      -- длительность бампера «ДАЛЕЕ»
 local PLASHKA_SEC = 5.0     -- длительность плашки серии

@@ -26,9 +26,12 @@ local kitdir = mp.command_native({ "expand-path", "~~/" }) or "."
 local state_file = kitdir .. "/localtv-channel-state.json"
 local log_file = kitdir .. "/localtv-resume.log"
 
--- Старое расположение в %APPDATA% — только для РАЗОВОЙ миграции (если нового
--- файла ещё нет, подхватим прежнюю закладку).
-local legacy_state = (os.getenv("APPDATA") or os.getenv("HOME") or ".") .. "/jetix-channel-state.json"
+-- Файл со СТАРЫМ именем в той же папке: приложение обычно переименовывает его при
+-- старте, но если не смогло (занят) — читаем его здесь, иначе прогресс не виден и
+-- будет затёрт пустым. Писать продолжаем ТОЛЬКО в state_file.
+-- Файл из %APPDATA% намеренно НЕ читаем: он остался от старой схемы, содержит лишь
+-- позицию без карты сериалов и, подхватившись, обнулял бы прогресс по сериалам.
+local legacy_state = kitdir .. "/jetix-channel-state.json"
 
 -- Корень библиотеки (тот же, что у channel-osd.lua) — для разбора «сериал/серия».
 local root = mp.get_opt("channelosd-root") or ""
@@ -60,8 +63,8 @@ local function read_json_file(path)
     return data and utils.parse_json(data) or nil
 end
 
--- Подхватываем уже накопленный прогресс (новый файл, иначе legacy), чтобы НЕ
--- затереть позиции сериалов, которые в этом сеансе ещё не игрались.
+-- Подхватываем уже накопленный прогресс (каноничный файл, иначе со старым именем
+-- рядом), чтобы НЕ затереть позиции сериалов, которые в этом сеансе ещё не игрались.
 local function load_progress()
     local s = read_json_file(state_file) or read_json_file(legacy_state)
     if s and type(s.shows) == "table" then
@@ -117,7 +120,7 @@ local function restore_state()
 
     local count = mp.get_property_number("playlist-count", 0) or 0
 
-    -- читаем новый файл (config-dir); если его ещё нет — разовая миграция со старого %APPDATA%
+    -- читаем каноничный файл; если его ещё нет — файл со старым именем в той же папке
     local src = state_file
     local f = io.open(state_file, "r")
     if not f then
@@ -167,6 +170,6 @@ mp.register_event("shutdown", save_state)
 mp.add_periodic_timer(15, save_state)
 
 -- «Маяк» загрузки: нет этой строки в логе после старта = скрипт не загрузился.
-rlog(string.format("loaded; kitdir=%s state=%s legacy=%s appdata=%s cwd=%s",
+rlog(string.format("loaded; kitdir=%s state=%s legacy=%s cwd=%s",
     tostring(kitdir), tostring(state_file), tostring(legacy_state),
-    tostring(os.getenv("APPDATA")), tostring(mp.get_property("working-directory"))))
+    tostring(mp.get_property("working-directory"))))

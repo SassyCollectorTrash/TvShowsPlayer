@@ -11,7 +11,7 @@ namespace TvShowsPlayer.App;
 public static class Autostart
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = Branding.AppName;
+    private const string ValueName = Branding.AutostartValueName;
 
     public static bool IsEnabled()
     {
@@ -33,22 +33,33 @@ public static class Autostart
     }
 
     /// <summary>
-    /// Разовый перенос автозапуска со старого имени значения ("JETIX") на текущее.
-    /// Если старый автозапуск был включён — включаем под новым именем (на текущий exe)
-    /// и удаляем старое значение. Иначе — ничего не делаем.
+    /// Разовый перенос автозапуска со старого имени значения на текущее. Трогаем ТОЛЬКО
+    /// значение, указывающее на это же приложение (чужую запись с таким именем не
+    /// угоняем), и удаляем старое лишь после успешной записи нового. Ошибки реестра
+    /// (политики, антивирус) не должны ронять запуск канала — глушим их здесь.
     /// </summary>
     public static void MigrateLegacyName()
     {
-        const string legacyValueName = "JETIX";
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe))
+                return;
 
-        using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
-        if (key?.GetValue(legacyValueName) is null)
-            return;
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            if (key?.GetValue(Branding.LegacyAutostartValueName) is not string legacyCommand)
+                return;
 
-        var exe = Environment.ProcessPath;
-        if (!string.IsNullOrEmpty(exe))
+            var exeName = Path.GetFileName(exe);
+            if (!legacyCommand.Contains(exeName, StringComparison.OrdinalIgnoreCase))
+                return;   // это не наш автозапуск (напр. старый скриптовый кит) — не трогаем
+
             key.SetValue(ValueName, $"\"{exe}\"");
-
-        key.DeleteValue(legacyValueName, throwOnMissingValue: false);
+            key.DeleteValue(Branding.LegacyAutostartValueName, throwOnMissingValue: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // автозапуск не критичен для работы канала — молча пропускаем
+        }
     }
 }

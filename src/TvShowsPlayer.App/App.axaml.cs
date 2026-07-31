@@ -29,6 +29,7 @@ public partial class App : Application
     private NativeMenuItem? _callModeItem;
     private SettingsWindow? _settingsWindow;
     private string _configPath = string.Empty;
+    private Mutex? _instanceLock;
     private bool _callMuted;
     private bool _shuttingDown;
 
@@ -41,6 +42,17 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            _mode = ResolveMode();
+
+            // Второй экземпляр того же режима недопустим: два канала пишут один и тот
+            // же файл состояния (и мигрируют папку под собой) — прогресс просмотра
+            // портится. Молча уходим, канал уже работает.
+            if (!TryAcquireSingleInstance())
+            {
+                Environment.Exit(0);
+                return;
+            }
+
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             desktop.Exit += (_, _) => Cleanup();
             StartChannel();
@@ -49,9 +61,22 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    // Один канал на режим (dev и prod не мешают друг другу — имена разные).
+    private bool TryAcquireSingleInstance()
+    {
+        try
+        {
+            _instanceLock = new Mutex(initiallyOwned: true, $@"Local\{Branding.AppName}-{_mode}", out var isNew);
+            return isNew;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return true;   // не смогли проверить — не мешаем запуску
+        }
+    }
+
     private void StartChannel()
     {
-        _mode = ResolveMode();
         var appDir = AppContext.BaseDirectory;
         var isProd = _mode == ChannelMode.Production;
 
@@ -62,13 +87,17 @@ public partial class App : Application
         if (isProd)
         {
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrEmpty(localAppData))   // без %LOCALAPPDATA% не кладём конфиг в CWD
+                localAppData = appDir;
+
             LegacyConfigMigration.Run(localAppData);   // разовый перенос со старого имени (Jetix → LocalTV)
             Autostart.MigrateLegacyName();             // и автозапуск-ключ реестра
-            var newDir = Path.Combine(localAppData, Branding.AppName);
-            var legacyDir = Path.Combine(localAppData, Branding.LegacyAppName);
-            // Если перенос папки не удался (напр. файл занят) — не теряем прогресс:
-            // продолжаем со старой папкой, перенос повторится при следующем старте.
-            configDir = Directory.Exists(newDir) || !Directory.Exists(legacyDir) ? newDir : legacyDir;
+
+            // Если перенос папки не удался (напр. занята) — работаем со старой, а имя
+            // файла состояния приводим к каноничному ИМЕННО в ней: resume.lua пишет
+            // только каноничное имя, иначе прогресс не будет виден и будет затёрт.
+            configDir = ChannelPaths.ResolveConfigDir(localAppData);
+            LegacyConfigMigration.RenameStateFile(configDir);
         }
         else
         {
@@ -91,7 +120,7 @@ public partial class App : Application
         {
             Root = config.CartoonsRoot,
             PlaylistPath = playlist,
-            StatePath = ResolveStatePath(configDir),
+            StatePath = ChannelPaths.ResolveStatePath(configDir),
             ExcludedShows = config.ExcludedShows,
             ShowOrder = config.ShowOrder,
             Window = config.Window,
@@ -106,6 +135,7 @@ public partial class App : Application
             Playlist = playlist,
             PipePath = $@"\\.\pipe\{pipeName}",
             ChannelOsdRoot = config.CartoonsRoot,   // имя сериала для next-show / «сейчас»
+            ChannelName = config.ChannelName,       // имя канала на заставке
             Fullscreen = isProd,
         };
 
@@ -187,18 +217,6 @@ public partial class App : Application
             case HotkeyAction.Resync: _ = _controller?.ResyncAsync(); break;
             case HotkeyAction.ShowNow: _ = _controller?.ShowNowAsync(); break;
         }
-    }
-
-    // Путь к файлу состояния: каноничный, а если после переименования остался только
-    // старый — берём его (миграция файла повторится позже). Прогрессу не даём потеряться.
-    private static string ResolveStatePath(string configDir)
-    {
-        var canonical = Path.Combine(configDir, Branding.StateFileName);
-        if (File.Exists(canonical))
-            return canonical;
-
-        var legacy = Path.Combine(configDir, Branding.LegacyStateFileName);
-        return File.Exists(legacy) ? legacy : canonical;
     }
 
     // Режим: env LOCALTV_MODE перекрывает; иначе Debug→Dev, Release→Prod. Гарантия —
@@ -317,5 +335,11 @@ public partial class App : Application
         _hotkeyWindow?.Close();
         _controller?.Dispose();
         _supervisor?.Dispose();   // гасит свой mpv, если ещё жив
+
+        if (_instanceLock is not null)
+        {
+            try { _instanceLock.ReleaseMutex(); } catch (ApplicationException) { }
+            _instanceLock.Dispose();
+        }
     }
 }

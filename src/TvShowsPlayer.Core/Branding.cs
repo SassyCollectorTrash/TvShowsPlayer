@@ -14,6 +14,10 @@ public static class Branding
     public const string StateFileName = "localtv-channel-state.json";
     public const string LegacyStateFileName = "jetix-channel-state.json";
 
+    // Имя значения автозапуска в HKCU\...\Run (старое — только для миграции).
+    public const string AutostartValueName = AppName;
+    public const string LegacyAutostartValueName = "JETIX";
+
     // Именованный pipe mpv JSON-IPC (dev — отдельный, чтобы не пересекаться с prod).
     public const string PipeName = "localtvmpv";
     public const string PipeNameDev = "localtvmpv-dev";

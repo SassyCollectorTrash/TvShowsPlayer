@@ -43,6 +43,23 @@ public class UpdateCheckerTests
         UpdateChecker.Parse("not json at all").Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"строка\"")]
+    [InlineData("123")]
+    [InlineData("null")]
+    public void Parse_JsonThatIsNotAnObject_ReturnsNull_NotThrows(string json)
+    {
+        // прокси/капча могут вернуть 200 с чем угодно — метод обязан быть тотальным
+        UpdateChecker.Parse(json).Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_NonStringTag_ReturnsNull()
+    {
+        UpdateChecker.Parse("{\"tag_name\":123}").Should().BeNull();
+    }
+
     [Fact]
     public void Parse_NonVersionTag_ReturnsNull()
     {

@@ -38,7 +38,9 @@ public partial class SettingsWindow : Window
     private TextBlock _status = null!;
     private TextBlock _versionText = null!;
     private Button _updateButton = null!;
+    private Button _checkUpdateButton = null!;
     private string? _releaseUrl;
+    private readonly CancellationTokenSource _closing = new();
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(6) };
     private static readonly Version AppVersion =
@@ -72,7 +74,9 @@ public partial class SettingsWindow : Window
         _autostartBox.IsChecked = Autostart.IsEnabled();
         _versionText = this.FindControl<TextBlock>("VersionText")!;
         _updateButton = this.FindControl<Button>("UpdateButton")!;
+        _checkUpdateButton = this.FindControl<Button>("CheckUpdateButton")!;
         _versionText.Text = $"{Branding.AppName} v{AppVersion.ToString(3)}";
+        Closed += (_, _) => _closing.Cancel();   // не дописываем в контролы закрытого окна
 
         PopulateAudioDevices();
         PopulateShows();
@@ -94,7 +98,10 @@ public partial class SettingsWindow : Window
 
     private void OnOpenReleases(object? sender, RoutedEventArgs e)
     {
-        var url = _releaseUrl ?? Branding.ReleasesUrl;
+        // ссылка приходит из ответа GitHub — открываем только https, иначе свою страницу
+        var url = Uri.TryCreate(_releaseUrl, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps
+            ? _releaseUrl!
+            : Branding.ReleasesUrl;
         try
         {
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
@@ -110,9 +117,17 @@ public partial class SettingsWindow : Window
         try
         {
             if (!silent)
+            {
                 _status.Text = "Проверяю обновления…";
+                _checkUpdateButton.IsEnabled = false;   // без гонки повторных кликов
+            }
 
-            var info = await UpdateChecker.FetchLatestAsync(Http, Branding.RepoOwner, Branding.RepoName);
+            var info = await UpdateChecker.FetchLatestAsync(
+                Http, Branding.RepoOwner, Branding.RepoName, _closing.Token);
+
+            if (_closing.IsCancellationRequested)
+                return;   // окно закрыли, пока шёл запрос
+
             if (info is null)
             {
                 if (!silent)
@@ -138,6 +153,10 @@ public partial class SettingsWindow : Window
         {
             if (!silent)
                 _status.Text = "Не удалось проверить обновления";
+        }
+        finally
+        {
+            _checkUpdateButton.IsEnabled = true;
         }
     }
 
@@ -337,7 +356,7 @@ public partial class SettingsWindow : Window
             ApplyShowConfig();
             var dir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
             var playlistPath = Path.Combine(dir, "channel.m3u");
-            var statePath = Path.Combine(dir, Branding.StateFileName);
+            var statePath = ChannelPaths.ResolveStatePath(dir);
 
             if (_preserveCurrent.IsChecked == true && _controller is not null)
             {

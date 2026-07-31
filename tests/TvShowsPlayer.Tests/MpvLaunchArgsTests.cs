@@ -67,4 +67,36 @@ public class MpvLaunchArgsTests
 
         args.Should().NotContain(a => a.StartsWith("--script-opts"));
     }
+
+    [Fact]
+    public void Build_WithChannelName_PassesItToOsdScript()
+    {
+        var options = DevOptions() with { ChannelName = "Дом ТВ" };
+
+        var args = MpvLaunchArgs.Build(options);
+
+        args.Should().Contain("--script-opts=channelosd-name=Дом ТВ");
+    }
+
+    [Fact]
+    public void Build_WithRootAndName_CombinesThemIntoOneScriptOpts()
+    {
+        var options = DevOptions() with { ChannelOsdRoot = @"C:\Cartoons", ChannelName = "LocalTV" };
+
+        var args = MpvLaunchArgs.Build(options);
+
+        args.Should().ContainSingle(a => a.StartsWith("--script-opts="))
+            .Which.Should().Be(@"--script-opts=channelosd-root=C:\Cartoons,channelosd-name=LocalTV");
+    }
+
+    [Fact]
+    public void Build_ChannelNameWithComma_StripsIt_SoScriptOptsStayParseable()
+    {
+        // запятая — разделитель пар в --script-opts, иначе mpv разберёт имя как опцию
+        var options = DevOptions() with { ChannelName = "Дом, милый дом" };
+
+        var args = MpvLaunchArgs.Build(options);
+
+        args.Should().Contain("--script-opts=channelosd-name=Дом милый дом");
+    }
 }
