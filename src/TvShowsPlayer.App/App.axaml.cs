@@ -39,6 +39,7 @@ public partial class App : Application
     private DateTime _firstUnexpectedExit;
     private int _unexpectedExits;
     private bool _refreshingLibrary;
+    private bool _sessionEnding;
     private bool _callMuted;
     private bool _shuttingDown;
 
@@ -64,6 +65,15 @@ public partial class App : Application
 
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             desktop.Exit += (_, _) => Cleanup();
+
+            // Второй источник сигнала о завершении сеанса: оконного сообщения может
+            // не быть вовсе, если пользователь выключил горячие клавиши (тогда нет и
+            // скрытого окна, которое их принимает).
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                _sessionEnding = true;
+                AppLog.Write("получен запрос на завершение работы");
+            };
 
             // Сбой запуска раньше был невидим (процесс просто исчезал). Теперь —
             // понятное сообщение и запись в журнал рядом с конфигом.
@@ -282,6 +292,17 @@ public partial class App : Application
         // Task.Run — чтобы ожидание шло вне потока интерфейса (иначе рискуем встать).
         if (Task.Run(() => MpvController.QuitOrphanAsync(pipeName)).GetAwaiter().GetResult())
             AppLog.Write("найден проигрыватель от прошлого запуска — закрыт");
+
+        // Без проигрывателя канала не будет. Чаще всего это распакованный «наполовину»
+        // архив — скажем об этом прямо, а не общими словами про ошибку запуска.
+        if (!File.Exists(config.MpvPath))
+        {
+            AppLog.ShowError(
+                $"Не найден проигрыватель:\n{config.MpvPath}\n\n" +
+                "Скорее всего архив распакован не целиком. Распакуй его полностью — " +
+                "рядом с программой должна быть папка mpv.");
+            return PlaybackStart.NoLibrary;
+        }
 
         var launchArgs = MpvLaunchArgs.Build(options);
         AppLog.Write($"запускаю проигрыватель: {config.MpvPath} {string.Join(" ", launchArgs)}");
@@ -557,8 +578,20 @@ public partial class App : Application
         _hotkeyRetryTimer.Start();
     }
 
+    private const uint WmQueryEndSession = 0x0011;
+    private const uint WmEndSession = 0x0016;
+
     private IntPtr OnWndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // Windows выключается или пользователь выходит из системы. Это надо знать:
+        // проигрыватель сейчас убьют, и принимать это за «упал — поднимаю заново»
+        // нельзя, иначе канал стартует посреди завершения работы.
+        if (msg is WmQueryEndSession or WmEndSession && !_sessionEnding)
+        {
+            _sessionEnding = true;
+            AppLog.Write("система завершает работу — канал не перезапускаем");
+        }
+
         _hotkeys?.HandleMessage(msg, wParam);
         return IntPtr.Zero;
     }
@@ -910,13 +943,26 @@ public partial class App : Application
     // скриптовый кит делал `taskkill /IM mpv.exe`). Для круглосуточного канала правильно
     // подняться заново, а не тихо исчезнуть из трея. Но если это повторяется — сдаёмся
     // и говорим об этом, чтобы не крутить бесконечный цикл перезапусков.
-    private void OnMpvExited(object? sender, EventArgs e) =>
-        Dispatcher.UIThread.Post(HandleMpvExited);
+    private void OnMpvExited(object? sender, EventArgs e)
+    {
+        // Событие приходит из служебного потока. При выключении компьютера очередь
+        // интерфейса может быть уже закрыта, и обращение к ней бросает исключение —
+        // а необработанное исключение в служебном потоке роняет процесс с окном
+        // «неизвестная программная ошибка» вместо тихого завершения.
+        try
+        {
+            Dispatcher.UIThread.Post(HandleMpvExited);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"плеер закрылся во время завершения работы: {ex.GetType().Name}");
+        }
+    }
 
     private void HandleMpvExited()
     {
-        if (_shuttingDown)
-            return;
+        if (_shuttingDown || _sessionEnding)
+            return;   // выключение компьютера — уходим тихо, а не поднимаем канал
 
         var now = DateTime.UtcNow;
         if (now - _firstUnexpectedExit > TimeSpan.FromMinutes(5))
