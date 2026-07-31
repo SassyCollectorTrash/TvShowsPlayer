@@ -75,7 +75,14 @@ public sealed class MpvSupervisor : IDisposable
             // перезапуск канала выглядел бы как «mpv умер» и закрывал приложение.
             _process.EnableRaisingEvents = false;
             if (!_process.HasExited)
+            {
                 _process.Kill(entireProcessTree: true);
+
+                // ДОЖИДАЕМСЯ смерти: пока старый mpv жив, жив и его именованный канал.
+                // Новый клиент успевал подключиться к умирающему экземпляру — связь
+                // тут же рвалась («Pipe is broken»), а пульт замолкал при живом эфире.
+                _process.WaitForExit(5000);
+            }
         }
         catch
         {

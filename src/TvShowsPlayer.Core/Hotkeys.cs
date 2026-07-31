@@ -83,6 +83,19 @@ public static class Hotkeys
 
     /// <summary>Привязки с пользовательским набором модификаторов (dev — плюс Shift,
     /// чтобы не спорить с боевым каналом).</summary>
+    /// <summary>Человеческое имя клавиши действия — чтобы сказать, что именно занято.</summary>
+    public static string KeyName(HotkeyAction action) => action switch
+    {
+        HotkeyAction.Pause => "Пробел",
+        HotkeyAction.VolumeUp => "=",
+        HotkeyAction.VolumeDown => "−",
+        HotkeyAction.NextEpisode => "стрелка вправо",
+        HotkeyAction.ToggleMute => "M (без звука)",
+        HotkeyAction.Resync => "R (починить звук)",
+        HotkeyAction.ShowNow => "N (что идёт сейчас)",
+        _ => action.ToString(),
+    };
+
     public static IReadOnlyList<HotkeyBinding> ForMode(HotkeyMode mode, string? modifiers)
     {
         var mods = ParseModifiers(modifiers);

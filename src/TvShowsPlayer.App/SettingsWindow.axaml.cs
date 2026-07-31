@@ -32,6 +32,7 @@ public partial class SettingsWindow : Window
     private ListBox _showsList = null!;
     private ListBox _queueList = null!;
     private ComboBox _audioBox = null!;
+    private ComboBox _screenBox = null!;
     private CheckBox _autostartBox = null!;
     private TextBlock _nowPlaying = null!;
     private CheckBox _preserveCurrent = null!;
@@ -71,6 +72,7 @@ public partial class SettingsWindow : Window
         _showsList = this.FindControl<ListBox>("ShowsList")!;
         _queueList = this.FindControl<ListBox>("QueueList")!;
         _audioBox = this.FindControl<ComboBox>("AudioDeviceBox")!;
+        _screenBox = this.FindControl<ComboBox>("ScreenBox")!;
         _nowPlaying = this.FindControl<TextBlock>("NowPlaying")!;
         _preserveCurrent = this.FindControl<CheckBox>("PreserveCurrent")!;
         _playlistStatus = this.FindControl<TextBlock>("PlaylistStatus")!;
@@ -98,6 +100,7 @@ public partial class SettingsWindow : Window
         Closed += (_, _) => _closing.Cancel();   // не дописываем в контролы закрытого окна
 
         _ = PopulateAudioDevicesAsync();
+        PopulateScreens();
         PopulateShows();
         SetupDragDrop();
         SetupAutoRefresh();
@@ -115,6 +118,24 @@ public partial class SettingsWindow : Window
     {
         if (sender is ComboBox { SelectedItem: string set })
             _config.HotkeyModifiers = set;
+    }
+
+    private void OnScreenChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox { SelectedItem: DisplayDevice screen })
+            _config.ScreenName = screen.DeviceName;
+    }
+
+    // Мониторы показываем по названию модели, а не номером: «Экран 1» ни о чём не
+    // говорит, особенно когда их три.
+    private void PopulateScreens()
+    {
+        var screens = DisplayDevices.List();
+        _screenBox.ItemsSource = screens;
+        _screenBox.SelectedItem =
+            screens.FirstOrDefault(s => s.DeviceName == _config.ScreenName)
+            ?? screens.ElementAtOrDefault(_config.FsScreen)   // конфиг из прежней версии
+            ?? screens.FirstOrDefault();
     }
 
     // ---- диагностика библиотеки: как распознались серии ----
@@ -186,16 +207,25 @@ public partial class SettingsWindow : Window
                 _checkUpdateButton.IsEnabled = false;   // без гонки повторных кликов
             }
 
-            var info = await UpdateChecker.FetchLatestAsync(
+            var check = await UpdateChecker.FetchLatestAsync(
                 Http, Branding.RepoOwner, Branding.RepoName, _closing.Token);
 
             if (_closing.IsCancellationRequested)
                 return;   // окно закрыли, пока шёл запрос
 
-            if (info is null)
+            if (!check.Reachable)
             {
                 if (!silent)
-                    _status.Text = "Не получилось проверить обновления — нет связи с интернетом?";
+                    _status.Text = "Не получилось связаться с сайтом программы — проверь интернет";
+                return;
+            }
+
+            if (check.Latest is not { } info)
+            {
+                // связь есть, но релизов ещё не выкладывали — это не ошибка
+                _updateButton.IsVisible = false;
+                if (!silent)
+                    _status.Text = "Обновлений пока нет";
                 return;
             }
 
@@ -216,7 +246,7 @@ public partial class SettingsWindow : Window
         catch
         {
             if (!silent)
-                _status.Text = "Не получилось проверить обновления — нет связи с интернетом?";
+                _status.Text = "Не получилось связаться с сайтом программы — проверь интернет";
         }
         finally
         {

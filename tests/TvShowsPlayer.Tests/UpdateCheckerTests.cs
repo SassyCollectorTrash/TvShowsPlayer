@@ -67,6 +67,22 @@ public class UpdateCheckerTests
     }
 
     [Fact]
+    public void Check_NoReleasesPublishedYet_IsNotANetworkProblem()
+    {
+        // GitHub отвечает 404, пока не выложен ни один релиз — врать про интернет нельзя
+        var check = UpdateCheck.NoReleases;
+
+        check.Reachable.Should().BeTrue();
+        check.Latest.Should().BeNull();
+    }
+
+    [Fact]
+    public void Check_Unreachable_SaysSo()
+    {
+        UpdateCheck.Unreachable.Reachable.Should().BeFalse();
+    }
+
+    [Fact]
     public void HasUpdate_WhenLatestNewer_IsTrue()
     {
         var latest = new UpdateInfo(new Version(1, 1, 0), null);

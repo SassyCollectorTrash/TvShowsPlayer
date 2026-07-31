@@ -1,9 +1,24 @@
+using System.Net;
 using System.Text.Json;
 
 namespace TvShowsPlayer.Core;
 
 /// <summary>Последний релиз с GitHub: разобранная версия и ссылка на страницу.</summary>
 public sealed record UpdateInfo(Version Version, string? ReleaseUrl);
+
+/// <summary>
+/// Итог проверки обновлений. «Не достучались» и «релизов ещё нет» — разные вещи:
+/// пока проект не выложил ни одного релиза, GitHub отвечает 404, и говорить
+/// пользователю про отсутствие интернета было бы неправдой.
+/// </summary>
+public sealed record UpdateCheck(bool Reachable, UpdateInfo? Latest)
+{
+    public static UpdateCheck Unreachable { get; } = new(false, null);
+
+    public static UpdateCheck NoReleases { get; } = new(true, null);
+
+    public static UpdateCheck Found(UpdateInfo info) => new(true, info);
+}
 
 /// <summary>
 /// Проверка обновлений через GitHub Releases. Разбор ответа и сравнение версий —
@@ -48,10 +63,11 @@ public static class UpdateChecker
     }
 
     /// <summary>
-    /// Запросить последний релиз с GitHub. Никогда не бросает — при любой ошибке
-    /// (нет сети, не 2xx, битый JSON) возвращает <c>null</c>.
+    /// Запросить последний релиз с GitHub. Никогда не бросает. Различает «связи нет»
+    /// и «релизов пока не выкладывали» (404) — иначе пользователю сообщали бы о
+    /// проблемах с интернетом там, где их нет.
     /// </summary>
-    public static async Task<UpdateInfo?> FetchLatestAsync(
+    public static async Task<UpdateCheck> FetchLatestAsync(
         HttpClient http, string owner, string repo, CancellationToken ct = default)
     {
         try
@@ -62,14 +78,20 @@ public static class UpdateChecker
             req.Headers.Accept.ParseAdd("application/vnd.github+json");
 
             using var resp = await http.SendAsync(req, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode)
-                return null;
 
-            return Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            // 404 — релизов ещё нет (или репозиторий закрыт), но связь при этом есть.
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+                return UpdateCheck.NoReleases;
+
+            if (!resp.IsSuccessStatusCode)
+                return UpdateCheck.Unreachable;
+
+            var info = Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            return info is null ? UpdateCheck.NoReleases : UpdateCheck.Found(info);
         }
         catch
         {
-            return null;   // проверка обновлений не должна ломать приложение
+            return UpdateCheck.Unreachable;   // проверка обновлений не должна ломать приложение
         }
     }
 

@@ -28,13 +28,22 @@ public sealed class GlobalHotkeys : IDisposable
     /// <summary>Число успешно зарегистрированных хоткеев (для диагностики).</summary>
     public int RegisteredCount => _registered.Count;
 
+    /// <summary>Комбинации, которые не удалось занять (их держит другая программа).</summary>
+    public IReadOnlyList<HotkeyAction> Failed { get; private set; } = Array.Empty<HotkeyAction>();
+
     public void Register()
     {
+        var failed = new List<HotkeyAction>();
+
         foreach (var b in _bindings)
         {
             if (RegisterHotKey(_hwnd, b.Id, (uint)b.Modifiers, b.VirtualKey))
                 _registered.Add(b.Id);
+            else
+                failed.Add(b.Action);   // комбинацию уже занял кто-то другой
         }
+
+        Failed = failed;
     }
 
     /// <summary>Обработать оконное сообщение; на <c>WM_HOTKEY</c> дёрнуть действие.</summary>

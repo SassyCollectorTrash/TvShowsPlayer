@@ -33,6 +33,10 @@ public partial class App : Application
     private Mutex? _instanceLock;
     private DispatcherTimer? _volumeSaveTimer;
     private string _lastBuildNotice = string.Empty;
+    private string _hotkeyWarning = string.Empty;
+    private const int MaxUnexpectedExits = 3;
+    private DateTime _firstUnexpectedExit;
+    private int _unexpectedExits;
     private bool _refreshingLibrary;
     private bool _callMuted;
     private bool _shuttingDown;
@@ -124,6 +128,10 @@ public partial class App : Application
         AppLog.UseDirectory(configDir);
         AppLog.Write($"старт: режим={_mode}, config-dir={configDir}");
 
+        // Пригодится, когда канал «показывает не на том экране».
+        AppLog.Write("экраны: " + string.Join(" | ",
+            DisplayDevices.List().Select(d => $"{d.Description} [{d.DeviceName}]")));
+
         _configPath = Path.Combine(configDir, "appconfig.json");
         var config = AppConfig.Load(_configPath);
         ResolveMpvPath(config, appDir);   // бандл-mpv, если путь в конфиге не существует
@@ -164,6 +172,12 @@ public partial class App : Application
         {
             AppLog.ShowWarning("Канал включён." + _lastBuildNotice);
             _lastBuildNotice = string.Empty;
+        }
+
+        if (_hotkeyWarning.Length > 0)
+        {
+            AppLog.ShowWarning(_hotkeyWarning);
+            _hotkeyWarning = string.Empty;
         }
 
         if (started != PlaybackStart.Started)
@@ -379,9 +393,19 @@ public partial class App : Application
         try
         {
             await controller.ConnectAsync();
-            AppLog.Write(controller.IsConnected
-                ? "IPC: подключились к mpv"
-                : "IPC: подключиться не удалось — трей и хоткеи работать не будут");
+            if (!controller.IsConnected)
+            {
+                AppLog.Write("IPC: подключиться не удалось — значок у часов и клавиши работать не будут");
+                return;
+            }
+
+            AppLog.Write("IPC: подключились к mpv");
+
+            // На каком экране канал оказался НА САМОМ ДЕЛЕ — чтобы жалобу «показывает
+            // не на том мониторе» можно было разобрать по журналу, а не гадать.
+            var screens = await controller.GetDisplayNamesAsync();
+            if (screens is { Length: > 0 })
+                AppLog.Write("канал показывается на: " + string.Join(", ", screens));
         }
         catch (Exception ex)
         {
@@ -427,9 +451,15 @@ public partial class App : Application
 
         // Комбо мог занять другой программой — молчать об этом нельзя, иначе
         // «клавиши не работают» без единой подсказки.
-        if (_hotkeys.RegisteredCount < bindings.Count)
-            AppLog.Write($"хоткеи ({config.HotkeyModifiers}): занято другими программами " +
-                         $"{bindings.Count - _hotkeys.RegisteredCount} из {bindings.Count} — смени набор в настройках");
+        // Молчать нельзя: человек жмёт клавишу, ничего не происходит, и понять почему
+        // невозможно. Называем занятые комбинации поимённо.
+        if (_hotkeys.Failed.Count > 0)
+        {
+            var names = string.Join(", ", _hotkeys.Failed.Select(a => $"{config.HotkeyModifiers}+{Hotkeys.KeyName(a)}"));
+            AppLog.Write($"хоткеи заняты другими программами: {names}");
+            _hotkeyWarning = $"Эти сочетания клавиш уже заняты другой программой и работать не будут:\n{names}.\n\n" +
+                             "Можно выбрать другой набор клавиш в настройках, на вкладке «Звук и экран».";
+        }
     }
 
     private IntPtr OnWndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -734,8 +764,40 @@ public partial class App : Application
         Shutdown();   // выход обязан сработать, даже если IPC отвалился
     }
 
+    // Проигрыватель закрылся сам (упал или его прибила посторонняя программа — старый
+    // скриптовый кит делал `taskkill /IM mpv.exe`). Для круглосуточного канала правильно
+    // подняться заново, а не тихо исчезнуть из трея. Но если это повторяется — сдаёмся
+    // и говорим об этом, чтобы не крутить бесконечный цикл перезапусков.
     private void OnMpvExited(object? sender, EventArgs e) =>
-        Dispatcher.UIThread.Post(Shutdown);   // mpv закрылся → закрываем приложение
+        Dispatcher.UIThread.Post(HandleMpvExited);
+
+    private void HandleMpvExited()
+    {
+        if (_shuttingDown)
+            return;
+
+        var now = DateTime.UtcNow;
+        if (now - _firstUnexpectedExit > TimeSpan.FromMinutes(5))
+        {
+            _firstUnexpectedExit = now;
+            _unexpectedExits = 0;
+        }
+
+        _unexpectedExits++;
+
+        if (_unexpectedExits > MaxUnexpectedExits)
+        {
+            AppLog.ShowError(
+                "Проигрыватель несколько раз подряд закрылся сам.\n\n" +
+                "Обычно так бывает, если его закрывает другая программа — например, старая " +
+                "версия канала на AutoHotkey. Закрой её и запусти LocalTV снова.");
+            Shutdown();
+            return;
+        }
+
+        AppLog.Write($"проигрыватель закрылся сам — поднимаю канал заново (попытка {_unexpectedExits})");
+        RestartChannel();
+    }
 
     private void Shutdown()
     {

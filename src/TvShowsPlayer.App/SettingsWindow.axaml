@@ -214,8 +214,9 @@
           <TextBlock Classes="section" Text="Звук и экран" />
           <TextBlock Classes="label" Text="ГРОМКОСТЬ" />
           <NumericUpDown Value="{Binding Volume, Mode=TwoWay}" Minimum="0" Maximum="130" Increment="5" />
-          <TextBlock Classes="label" Text="НА КАКОМ ЭКРАНЕ ПОКАЗЫВАТЬ (0 — ОСНОВНОЙ, 1 — ВТОРОЙ)" />
-          <NumericUpDown Value="{Binding FsScreen, Mode=TwoWay}" Minimum="0" Maximum="10" Increment="1" />
+          <TextBlock Classes="label" Text="НА КАКОМ ЭКРАНЕ ПОКАЗЫВАТЬ" />
+          <ComboBox x:Name="ScreenBox" HorizontalAlignment="Left" MinWidth="400"
+                    SelectionChanged="OnScreenChanged" />
           <TextBlock Classes="label" Text="КУДА ВЫВОДИТЬ ЗВУК" />
           <ComboBox x:Name="AudioDeviceBox" HorizontalAlignment="Left" MinWidth="400"
                     SelectionChanged="OnAudioDeviceChanged">

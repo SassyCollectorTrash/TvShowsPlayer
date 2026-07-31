@@ -154,6 +154,23 @@ public class RobustnessTests : IDisposable
     }
 
     [Fact]
+    public void MpvConfig_WithChosenScreen_SelectsItByName()
+    {
+        var config = new AppConfig { ScreenName = @"\\.\DISPLAY2", FsScreen = 0 };
+
+        var generated = MpvConfig.Generate(config);
+
+        generated.Should().Contain(@"fs-screen-name=\\.\DISPLAY2");
+        generated.Should().NotContain("fs-screen=", "номер экрана не должен спорить с именем");
+    }
+
+    [Fact]
+    public void MpvConfig_WithoutScreenName_FallsBackToNumber()
+    {
+        MpvConfig.Generate(new AppConfig { FsScreen = 1 }).Should().Contain("fs-screen=1");
+    }
+
+    [Fact]
     public void Config_DefaultScreen_IsPrimary()
     {
         // на машине с одним монитором экрана №1 не существует

@@ -19,6 +19,8 @@ public sealed class MpvController : IDisposable
     private readonly string _pipeName;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private MpvIpcClient? _client;
+    private int _reconnecting;
+    private bool _disposed;
 
     public MpvController(string pipeName)
     {
@@ -82,6 +84,10 @@ public sealed class MpvController : IDisposable
     public Task<double> GetTimePosAsync(CancellationToken cancellationToken = default) =>
         GetAsync<double>("time-pos", cancellationToken);
 
+    /// <summary>Экраны, на которых сейчас окно канала (<c>display-names</c>).</summary>
+    public Task<string[]?> GetDisplayNamesAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<string[]>("display-names", cancellationToken);
+
     /// <summary>Текущая громкость плеера (<c>volume</c>).</summary>
     public Task<double> GetVolumeAsync(CancellationToken cancellationToken = default) =>
         GetAsync<double>("volume", cancellationToken);
@@ -128,6 +134,11 @@ public sealed class MpvController : IDisposable
         {
             return default;
         }
+        catch (Exception ex) when (IsConnectionLost(ex))
+        {
+            DropConnection(client);
+            return default;
+        }
         finally
         {
             _gate.Release();
@@ -160,14 +171,60 @@ public sealed class MpvController : IDisposable
         {
             // mpv не ответил вовремя — команда пропущена, приложение живёт дальше
         }
+        catch (Exception ex) when (IsConnectionLost(ex))
+        {
+            DropConnection(client);
+        }
         finally
         {
             _gate.Release();
         }
     }
 
+    // Связь с mpv рвётся не только когда он закрылся: посторонняя программа может
+    // убить процесс (старый скриптовый кит делал `taskkill /IM mpv.exe`), да и сам
+    // канал перезапускается. Молчать до перезапуска приложения нельзя — переподключаемся.
+    private static bool IsConnectionLost(Exception ex) =>
+        ex is IOException or ObjectDisposedException or MpvIpcException;
+
+    private void DropConnection(MpvIpcClient dead)
+    {
+        if (!ReferenceEquals(_client, dead))
+            return;   // уже заменили на новое соединение
+
+        _client = null;
+        dead.Dispose();
+
+        if (_disposed)
+            return;
+
+        _ = ReconnectAsync();
+    }
+
+    private async Task ReconnectAsync()
+    {
+        if (Interlocked.Exchange(ref _reconnecting, 1) == 1)
+            return;
+
+        try
+        {
+            await Task.Delay(500);   // даём mpv подняться заново
+            if (!_disposed)
+                await ConnectAsync();
+        }
+        catch
+        {
+            // не вышло — следующая команда попробует снова
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _reconnecting, 0);
+        }
+    }
+
     public void Dispose()
     {
+        _disposed = true;
         _client?.Dispose();
         _gate.Dispose();
     }

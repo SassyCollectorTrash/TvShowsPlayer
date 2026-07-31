@@ -15,7 +15,13 @@ public static class MpvConfig
         var sb = new StringBuilder();
         sb.AppendLine($"# Сгенерировано приложением {Branding.AppName} — меняй настройки в окне, не здесь.");
         sb.AppendLine("fullscreen=yes");
-        sb.AppendLine($"fs-screen={config.FsScreen}");
+
+        // Экран выбираем по имени, если оно известно: номера мониторов у разных
+        // программ нумеруются по-своему, и «экран 1» мог означать не тот дисплей.
+        if (!string.IsNullOrWhiteSpace(config.ScreenName))
+            sb.AppendLine($"fs-screen-name={config.ScreenName}");
+        else
+            sb.AppendLine($"fs-screen={config.FsScreen}");
         sb.AppendLine("loop-playlist=inf");
         sb.AppendLine("keep-open=no");
         // Канал не должен умирать, если плейлист пуст или файлы временно недоступны

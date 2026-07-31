@@ -39,6 +39,10 @@ public sealed class AppConfig
     // Плеер
     public string? AudioDevice { get; set; }
     public int Volume { get; set; } = 70;
+    // Экран для полноэкранного показа. Имя (\\.\DISPLAY1) надёжнее номера: порядок
+    // мониторов в разных программах не совпадает. Пусто — по номеру ниже.
+    public string ScreenName { get; set; } = "";
+
     // 0 = основной монитор. Дефолт намеренно 0: на машине с одним экраном
     // номер 1 не существует, и канал уезжал бы «в никуда».
     public int FsScreen { get; set; }
