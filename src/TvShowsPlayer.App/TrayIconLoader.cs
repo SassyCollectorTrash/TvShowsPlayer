@@ -1,15 +1,33 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using Avalonia.Controls;
+using Avalonia.Platform;
 
 namespace TvShowsPlayer.App;
 
 /// <summary>
-/// Достаёт иконку из exe (как AHK <c>TraySetIcon(mpv)</c>) и отдаёт её
-/// в виде <see cref="WindowIcon"/> для трея. Windows-only (System.Drawing).
+/// Иконка приложения для трея и окон: берём собственный логотип из ресурсов, а если
+/// его вдруг нет — падаем обратно на иконку mpv (как делал AHK-кит).
 /// </summary>
 internal static class TrayIconLoader
 {
+    private static readonly Uri IconUri = new("avares://TvShowsPlayer.App/Assets/icon.png");
+
+    /// <summary>Логотип канала из ресурсов сборки; null — ресурс недоступен.</summary>
+    public static WindowIcon? AppIcon()
+    {
+        try
+        {
+            using var stream = AssetLoader.Open(IconUri);
+            return new WindowIcon(stream);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Иконка из exe (запасной вариант). Windows-only (System.Drawing).</summary>
     public static WindowIcon? FromExecutable(string exePath)
     {
         try

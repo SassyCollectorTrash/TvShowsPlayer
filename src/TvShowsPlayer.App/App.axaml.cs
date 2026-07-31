@@ -140,7 +140,7 @@ public partial class App : Application
         if (icons is { Count: > 0 })
         {
             var tray = icons[0];
-            tray.Icon = TrayIconLoader.FromExecutable(config.MpvPath);
+            tray.Icon = TrayIconLoader.AppIcon() ?? TrayIconLoader.FromExecutable(config.MpvPath);
             tray.IsVisible = true;
             // единственный checkable пункт = «Режим созвона»; держим ссылку, чтобы
             // и трей, и хоткей меняли одну галочку (без магической строки-заголовка).

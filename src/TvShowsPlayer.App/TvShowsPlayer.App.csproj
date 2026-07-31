@@ -7,7 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Версия приложения: показывается в Настройках и сравнивается с последним релизом. -->
     <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- Логотип канала: иконка exe (.ico) и картинка для трея/окна (.png — Skia не читает .ico) -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\icon.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.2.0" />
