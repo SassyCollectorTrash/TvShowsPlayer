@@ -147,8 +147,8 @@ public partial class SettingsWindow : Window
             }).ToList();
 
             _libraryStatus.Text = reports.Count == 0
-                ? "Мультфильмы не найдены — проверь папку на вкладке «Мультфильмы»."
-                : $"Найдено мультфильмов: {reports.Count}, серий: {reports.Sum(r => r.EpisodeCount)}.";
+                ? "Сериалы не найдены — проверь папку на вкладке «Сериалы»."
+                : $"Найдено сериалов: {reports.Count}, серий: {reports.Sum(r => r.EpisodeCount)}.";
         }
         catch (Exception ex)
         {
@@ -459,7 +459,7 @@ public partial class SettingsWindow : Window
                 await _controller.SetPlaylistPosAsync(pos);
             }
 
-            _playlistStatus.Text = $"Готово: в эфире {result.ShowCount} мультфильмов, {result.PlaylistLength} серий в очереди.";
+            _playlistStatus.Text = $"Готово: в эфире {result.ShowCount} сериалов, {result.PlaylistLength} серий в очереди.";
             await RefreshNowAndNext();
         }
         catch (Exception ex)
@@ -577,7 +577,7 @@ public partial class SettingsWindow : Window
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "Выбери папку с мультфильмами",
+            Title = "Выбери папку с сериалами",
             AllowMultiple = false,
         });
 
@@ -612,7 +612,7 @@ public partial class SettingsWindow : Window
     {
         if (string.IsNullOrWhiteSpace(_config.CartoonsRoot) || !Directory.Exists(_config.CartoonsRoot))
         {
-            _status.Text = "Сначала выбери папку с мультфильмами на вкладке «Мультфильмы».";
+            _status.Text = "Сначала выбери папку с сериалами на вкладке «Сериалы».";
             return;
         }
 

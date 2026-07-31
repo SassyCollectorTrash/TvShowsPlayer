@@ -140,18 +140,18 @@
   <Grid RowDefinitions="*,Auto">
     <TabControl TabStripPlacement="Left" Grid.Row="0">
 
-      <TabItem Header="Мультфильмы">
+      <TabItem Header="Сериалы">
         <StackPanel Margin="28,24" MaxWidth="540" HorizontalAlignment="Left">
-          <TextBlock Classes="section" Text="Мультфильмы" />
-          <TextBlock Classes="label" Text="ПАПКА С МУЛЬТФИЛЬМАМИ" />
+          <TextBlock Classes="section" Text="Сериалы" />
+          <TextBlock Classes="label" Text="ПАПКА С СЕРИАЛАМИ" />
           <Grid ColumnDefinitions="*,Auto">
             <TextBox Grid.Column="0" x:Name="CartoonsRootBox" Text="{Binding CartoonsRoot, Mode=TwoWay}" />
             <Button Grid.Column="1" Content="Выбрать…" Click="OnBrowseCartoons" Margin="8,0,0,0" />
           </Grid>
-          <TextBlock Text="Внутри должна быть отдельная папка на каждый мультфильм, а в ней — файлы серий. Например: Мультфильмы \ Чип и Дейл \ Серия 01.mkv"
+          <TextBlock Text="Внутри должна быть отдельная папка на каждый сериал, а в ней — файлы серий. Например: Сериалы \ Чип и Дейл \ Серия 01.mkv"
                      Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
 
-          <TextBlock Classes="label" Text="КАК ЧАСТО ИСКАТЬ НОВЫЕ МУЛЬТФИЛЬМЫ, МИНУТ (0 — НЕ ИСКАТЬ)" />
+          <TextBlock Classes="label" Text="КАК ЧАСТО ИСКАТЬ НОВЫЕ СЕРИАЛЫ, МИНУТ (0 — НЕ ИСКАТЬ)" />
           <NumericUpDown Value="{Binding AutoRefreshMinutes, Mode=TwoWay}" Minimum="0" Maximum="720" Increment="5" />
           <TextBlock Classes="label" Text="СКОЛЬКО ЖДАТЬ, ПОКА СЕРИЯ ДОКАЧАЕТСЯ, МИНУТ" />
           <NumericUpDown Value="{Binding SettleMinutes, Mode=TwoWay}" Minimum="0" Maximum="240" Increment="5" />
@@ -171,7 +171,7 @@
           <TextBlock DockPanel.Dock="Top" Classes="section" Text="Проверка серий" />
           <TextBlock DockPanel.Dock="Top" Foreground="#949ba4" FontSize="12" TextWrapping="Wrap"
                      Margin="0,0,0,10"
-                     Text="Нажми «Проверить», если серии идут не по порядку. Программа покажет, как она поняла нумерацию каждого мультфильма, и предупредит, если номер сезона в названии файла не совпадает с папкой." />
+                     Text="Нажми «Проверить», если серии идут не по порядку. Программа покажет, как она поняла нумерацию каждого сериала, и предупредит, если номер сезона в названии файла не совпадает с папкой." />
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
             <Button Classes="accent" Content="Проверить" Click="OnInspectLibrary" />
             <TextBlock x:Name="LibraryStatus" Foreground="#949ba4" VerticalAlignment="Center" />
@@ -194,16 +194,18 @@
       <TabItem Header="Порядок показа">
         <StackPanel Margin="28,24" MaxWidth="520" HorizontalAlignment="Left">
           <TextBlock Classes="section" Text="Порядок показа" />
-          <TextBlock Text="Канал показывает мультфильмы по очереди: несколько серий одного, потом несколько серий следующего. Когда очередь возвращается к первому, он продолжает почти с того же места — как повтор на телевидении."
+          <TextBlock Text="Канал показывает сериалы по очереди: несколько серий одного, потом несколько серий следующего. Когда очередь возвращается к первому, он продолжает почти с того же места — как повтор на телевидении."
                      Foreground="#b5bac1" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,4" />
-          <TextBlock Classes="label" Text="СКОЛЬКО СЕРИЙ ПОДРЯД ОТ ОДНОГО МУЛЬТФИЛЬМА" />
+          <TextBlock Classes="label" Text="СКОЛЬКО СЕРИЙ ПОДРЯД ОДНОГО СЕРИАЛА" />
           <NumericUpDown Value="{Binding Window, Mode=TwoWay}" Minimum="1" Maximum="20" Increment="1" />
           <TextBlock Classes="label" Text="НА СКОЛЬКО СЕРИЙ СДВИГАТЬСЯ В СЛЕДУЮЩИЙ РАЗ" />
           <NumericUpDown Value="{Binding Step, Mode=TwoWay}" Minimum="1" Maximum="20" Increment="1" />
           <TextBlock Text="Например: показываем по 4 серии, сдвиг 2 — значит в следующий раз две серии повторятся, а две будут новые."
                      Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
-          <TextBlock Classes="label" Text="ОГРАНИЧЕНИЕ ДЛИНЫ СПИСКА (ЕСЛИ НЕ УВЕРЕН — НЕ МЕНЯЙ)" />
+          <TextBlock Classes="label" Text="НА СКОЛЬКО КРУГОВ ВПЕРЁД СОСТАВЛЯТЬ РАСПИСАНИЕ" />
           <NumericUpDown Value="{Binding CapRotations, Mode=TwoWay}" Minimum="1" Maximum="1000" Increment="10" />
+          <TextBlock Text="Круг — это когда очередь обошла все сериалы по разу. Расписание составляется заранее на столько кругов, а потом повторяется. Обычно менять не нужно."
+                     Foreground="#949ba4" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
         </StackPanel>
       </TabItem>
 
@@ -238,7 +240,7 @@
       <TabItem Header="Что в эфире">
         <Grid Margin="20,20" RowDefinitions="Auto,*,Auto" ColumnDefinitions="290,*">
 
-          <TextBlock Grid.Row="0" Grid.Column="0" Classes="section" Text="Мультфильмы" />
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="section" Text="Сериалы" />
           <TextBlock Grid.Row="0" Grid.Column="1" Classes="section" Text="Эфир" Margin="16,0,0,0" />
 
           <DockPanel Grid.Row="1" Grid.Column="0">
@@ -302,13 +304,13 @@
       <TabItem Header="Надписи на экране">
         <StackPanel Margin="28,24" MaxWidth="500" HorizontalAlignment="Left">
           <TextBlock Classes="section" Text="Надписи на экране" />
-          <TextBlock Text="Всё, что канал рисует поверх мультфильма. 0 секунд — не показывать вовсе."
+          <TextBlock Text="Всё, что канал рисует поверх видео. 0 секунд — не показывать вовсе."
                      Foreground="#b5bac1" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,4" />
           <TextBlock Classes="label" Text="НАЗВАНИЕ КАНАЛА НА ЗАСТАВКЕ" />
           <TextBox Text="{Binding ChannelName, Mode=TwoWay}" />
           <TextBlock Classes="label" Text="ЗАСТАВКА ПРИ ВКЛЮЧЕНИИ, СЕКУНД" />
           <NumericUpDown Value="{Binding SplashSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
-          <TextBlock Classes="label" Text="НАДПИСЬ «ДАЛЕЕ» ПРИ СМЕНЕ МУЛЬТФИЛЬМА, СЕКУНД" />
+          <TextBlock Classes="label" Text="НАДПИСЬ «ДАЛЕЕ» ПРИ СМЕНЕ СЕРИАЛА, СЕКУНД" />
           <NumericUpDown Value="{Binding BumperSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />
           <TextBlock Classes="label" Text="ПОДПИСЬ СЕРИИ ВНИЗУ ЭКРАНА, СЕКУНД" />
           <NumericUpDown Value="{Binding PlashkaSeconds, Mode=TwoWay}" Minimum="0" Maximum="30" Increment="0.5" />

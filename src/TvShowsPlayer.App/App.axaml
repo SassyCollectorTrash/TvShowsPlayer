@@ -6,7 +6,7 @@
   </Application.Styles>
   <TrayIcon.Icons>
     <TrayIcons>
-      <TrayIcon Icon="/Assets/icon.png" ToolTipText="LocalTV — канал с мультфильмами" IsVisible="False">
+      <TrayIcon Icon="/Assets/icon.png" ToolTipText="LocalTV — канал с сериалами" IsVisible="False">
         <TrayIcon.Menu>
           <NativeMenu>
             <NativeMenuItem Header="Пауза / продолжить" Click="OnPausePlay" />
@@ -14,13 +14,13 @@
             <NativeMenuItem Header="Тише" Click="OnVolumeDown" />
             <NativeMenuItemSeparator />
             <NativeMenuItem Header="Следующая серия" Click="OnNextEpisode" />
-            <NativeMenuItem Header="Следующий мультфильм" Click="OnNextShow" />
+            <NativeMenuItem Header="Следующий сериал" Click="OnNextShow" />
             <NativeMenuItem Header="Показать, что идёт сейчас" Click="OnShowNow" />
             <NativeMenuItem Header="Починить звук (если отстаёт от картинки)" Click="OnResync" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Тишина (на время звонка)" ToggleType="CheckBox" Click="OnToggleCall" />
+            <NativeMenuItem Header="Без звука" ToggleType="CheckBox" Click="OnToggleCall" />
             <NativeMenuItemSeparator />
-            <NativeMenuItem Header="Поискать новые мультфильмы" Click="OnRefreshLibrary" />
+            <NativeMenuItem Header="Поискать новые сериалы" Click="OnRefreshLibrary" />
             <NativeMenuItem Header="Перезапустить канал" Click="OnRestartChannel" />
             <NativeMenuItem Header="Настройки…" Click="OnSettings" />
             <NativeMenuItemSeparator />

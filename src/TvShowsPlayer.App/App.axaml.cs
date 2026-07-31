@@ -71,7 +71,7 @@ public partial class App : Application
                 AppLog.ShowError(
                     "Не удалось включить канал.\n\n" + ex.Message +
                     "\n\nОткрой настройки (значок программы у часов, справа внизу — правая кнопка мыши) " +
-                    "и проверь папку с мультфильмами.");
+                    "и проверь папку с сериалами.");
                 Shutdown();
             }
         }
@@ -180,7 +180,7 @@ public partial class App : Application
     {
         Started,
 
-        /// <summary>Папка с мультфильмами не указана или недоступна.</summary>
+        /// <summary>Папка с сериалами не указана или недоступна.</summary>
         NoLibrary,
 
         /// <summary>Папка есть, но играть нечего: пусто или всё ещё «не отстоялось».</summary>
@@ -305,7 +305,7 @@ public partial class App : Application
                     StartLibraryWatch(config);   // таймер жил при старом эфире — поднимаем заново
                     break;
                 case PlaybackStart.NoLibrary:
-                    AppLog.ShowWarning("Папка с мультфильмами не выбрана или недоступна.\n\nОткрой настройки, вкладка «Мультфильмы», и выбери папку.");
+                    AppLog.ShowWarning("Папка с сериалами не выбрана или недоступна.\n\nОткрой настройки, вкладка «Сериалы», и выбери папку.");
                     break;
                 case PlaybackStart.NothingToPlay:
                     AppLog.ShowWarning("В папке пока нет серий, готовых к показу.\n\nЕсли файлы только что скачались, подожди — канал возьмёт их сам.");
@@ -584,7 +584,7 @@ public partial class App : Application
             {
                 AppLog.Write("обновление библиотеки: папка недоступна — пропускаем");
                 if (manual)
-                    AppLog.ShowWarning("Папка с мультфильмами сейчас недоступна.\n\nЕсли мультфильмы лежат на внешнем диске — проверь, подключён ли он.");
+                    AppLog.ShowWarning("Папка с сериалами сейчас недоступна.\n\nЕсли сериалы лежат на внешнем диске — проверь, подключён ли он.");
                 return;
             }
 
