@@ -46,6 +46,41 @@ public sealed class GlobalHotkeys : IDisposable
         Failed = failed;
     }
 
+    /// <summary>
+    /// Повторить попытку для занятых комбинаций. Захват — это гонка: кто первым
+    /// попросил, тот и держит. Канал стартует вместе с Windows, когда другие
+    /// программы ещё грузятся, поэтому «не занялось» часто означает лишь «не
+    /// повезло сейчас». Возвращает те, что удалось отвоевать.
+    /// </summary>
+    public IReadOnlyList<HotkeyAction> RetryFailed()
+    {
+        if (Failed.Count == 0)
+            return Array.Empty<HotkeyAction>();
+
+        var recovered = new List<HotkeyAction>();
+        var stillFailed = new List<HotkeyAction>();
+
+        foreach (var b in _bindings)
+        {
+            if (!Failed.Contains(b.Action))
+                continue;
+
+            if (RegisterHotKey(_hwnd, b.Id, (uint)b.Modifiers, b.VirtualKey))
+            {
+                _registered.Add(b.Id);
+                recovered.Add(b.Action);
+            }
+            else
+            {
+                stillFailed.Add(b.Action);
+            }
+        }
+
+        Failed = stillFailed;
+
+        return recovered;
+    }
+
     /// <summary>Обработать оконное сообщение; на <c>WM_HOTKEY</c> дёрнуть действие.</summary>
     public void HandleMessage(uint msg, IntPtr wParam)
     {

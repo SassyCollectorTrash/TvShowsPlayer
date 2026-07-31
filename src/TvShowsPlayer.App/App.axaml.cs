@@ -32,6 +32,7 @@ public partial class App : Application
     private string _configDir = string.Empty;
     private Mutex? _instanceLock;
     private DispatcherTimer? _volumeSaveTimer;
+    private DispatcherTimer? _hotkeyRetryTimer;
     private string _lastBuildNotice = string.Empty;
     private string _hotkeyWarning = string.Empty;
     private const int MaxUnexpectedExits = 3;
@@ -497,6 +498,41 @@ public partial class App : Application
             config.ReportedHotkeyConflicts = string.Empty;   // конфликт ушёл — сообщим о новом
             config.Save(_configPath);
         }
+
+        StartHotkeyRetry(config.HotkeyModifiers);
+    }
+
+    /// <summary>
+    /// Занятые комбинации дожимаем: программа-соперник может закрыться или отпустить
+    /// клавишу, и тогда пульт заработает без перезапуска канала. Без этого
+    /// работоспособность клавиш зависела от того, кто раньше стартовал при загрузке
+    /// Windows.
+    /// </summary>
+    private void StartHotkeyRetry(string modifiers)
+    {
+        if (_hotkeys is null || _hotkeys.Failed.Count == 0)
+            return;
+
+        _hotkeyRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _hotkeyRetryTimer.Tick += (_, _) =>
+        {
+            if (_hotkeys is null)
+                return;
+
+            var recovered = _hotkeys.RetryFailed();
+            if (recovered.Count > 0)
+            {
+                AppLog.Write("клавиши освободились и теперь работают: " +
+                             string.Join(", ", recovered.Select(a => $"{modifiers}+{Hotkeys.KeyName(a)}")));
+            }
+
+            if (_hotkeys.Failed.Count == 0)
+            {
+                _hotkeyRetryTimer?.Stop();
+                _hotkeyRetryTimer = null;
+            }
+        };
+        _hotkeyRetryTimer.Start();
     }
 
     private IntPtr OnWndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -897,6 +933,7 @@ public partial class App : Application
     {
         AppLog.Write("завершение: закрываю проигрыватель и освобождаю клавиши");
         _volumeSaveTimer?.Stop();
+        _hotkeyRetryTimer?.Stop();
         _hotkeys?.Dispose();   // снимает RegisterHotKey
         if (_wndProcHook is not null && _hotkeyWindow is not null)
             Win32Properties.RemoveWndProcHookCallback(_hotkeyWindow, _wndProcHook);
