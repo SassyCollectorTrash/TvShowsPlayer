@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using TvShowsPlayer.Core;
 
 namespace TvShowsPlayer.App;
@@ -36,7 +37,12 @@ internal static class AppLog
 
         try
         {
-            File.AppendAllText(_logPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}{Environment.NewLine}");
+            // UTF-8 с BOM: журнал читает человек, и без метки Блокнот/старые
+            // редакторы показывают русский текст кракозябрами.
+            File.AppendAllText(
+                _logPath,
+                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}{Environment.NewLine}",
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

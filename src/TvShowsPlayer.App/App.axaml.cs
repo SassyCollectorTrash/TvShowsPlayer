@@ -29,6 +29,7 @@ public partial class App : Application
     private NativeMenuItem? _callModeItem;
     private SettingsWindow? _settingsWindow;
     private string _configPath = string.Empty;
+    private string _configDir = string.Empty;
     private Mutex? _instanceLock;
     private bool _callMuted;
     private bool _shuttingDown;
@@ -128,13 +129,48 @@ public partial class App : Application
         if (isProd)
             File.WriteAllText(Path.Combine(configDir, "mpv.conf"), MpvConfig.Generate(config));
 
-        // Приложение САМО генерирует свой плейлист из библиотеки — в свой config-dir.
-        var playlist = Path.Combine(configDir, "channel.m3u");
-        ChannelBuilder.Build(new ChannelBuildOptions
+        _configDir = configDir;
+
+        // Иконка трея берётся из mpv.exe (динамическая) → ставим после загрузки XAML,
+        // затем делаем видимой, чтобы нативная иконка создалась уже с картинкой.
+        var icons = TrayIcon.GetIcons(this);
+        if (icons is { Count: > 0 })
+        {
+            var tray = icons[0];
+            tray.Icon = TrayIconLoader.FromExecutable(config.MpvPath);
+            tray.IsVisible = true;
+            // единственный checkable пункт = «Режим созвона»; держим ссылку, чтобы
+            // и трей, и хоткей меняли одну галочку (без магической строки-заголовка).
+            _callModeItem = tray.Menu?.Items.OfType<NativeMenuItem>()
+                .FirstOrDefault(i => i.ToggleType == NativeMenuItemToggleType.CheckBox);
+        }
+
+        StartHotkeys();
+
+        // Трей и хоткеи уже живут — теперь эфир. Если библиотеки нет, приложение
+        // ОСТАЁТСЯ в трее и открывает настройки: раньше mpv с пустым плейлистом
+        // сразу выходил и уносил приложение с собой, и указать папку было негде.
+        if (!StartPlayback(config))
+        {
+            AppLog.Write("библиотека не указана или недоступна — эфир не запущен, открываю настройки");
+            OnSettings(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Собрать плейлист и поднять mpv. <c>false</c> — библиотеки нет (папка не задана
+    /// или недоступна), эфир не запускаем.
+    /// </summary>
+    private bool StartPlayback(AppConfig config)
+    {
+        var isProd = _mode == ChannelMode.Production;
+        var playlist = Path.Combine(_configDir, "channel.m3u");
+
+        var build = ChannelBuilder.Build(new ChannelBuildOptions
         {
             Root = config.CartoonsRoot,
             PlaylistPath = playlist,
-            StatePath = ChannelPaths.ResolveStatePath(configDir),
+            StatePath = ChannelPaths.ResolveStatePath(_configDir),
             ExcludedShows = config.ExcludedShows,
             ShowOrder = config.ShowOrder,
             Window = config.Window,
@@ -142,10 +178,17 @@ public partial class App : Application
             CapRotations = config.CapRotations,
         });
 
+        // Плейлиста нет вообще (первый запуск без библиотеки) — запускать нечего.
+        if (build.LibraryMissing && !File.Exists(playlist))
+            return false;
+
+        if (build.LibraryMissing)
+            AppLog.Write($"библиотека недоступна ({config.CartoonsRoot}) — играем прежний плейлист");
+
         var pipeName = isProd ? Branding.PipeName : Branding.PipeNameDev;
         var options = new MpvLaunchOptions
         {
-            ConfigDir = configDir,
+            ConfigDir = _configDir,
             Playlist = playlist,
             PipePath = $@"\\.\pipe\{pipeName}",
             ChannelOsdRoot = config.CartoonsRoot,   // имя сериала для next-show / «сейчас»
@@ -171,21 +214,45 @@ public partial class App : Application
         _controller = new MpvController(pipeName);
         _ = ConnectControllerAsync(_controller);   // фоновое подключение к pipe (с ретраем)
 
-        // Иконка трея берётся из mpv.exe (динамическая) → ставим после загрузки XAML,
-        // затем делаем видимой, чтобы нативная иконка создалась уже с картинкой.
-        var icons = TrayIcon.GetIcons(this);
-        if (icons is { Count: > 0 })
-        {
-            var tray = icons[0];
-            tray.Icon = TrayIconLoader.FromExecutable(config.MpvPath);
-            tray.IsVisible = true;
-            // единственный checkable пункт = «Режим созвона»; держим ссылку, чтобы
-            // и трей, и хоткей меняли одну галочку (без магической строки-заголовка).
-            _callModeItem = tray.Menu?.Items.OfType<NativeMenuItem>()
-                .FirstOrDefault(i => i.ToggleType == NativeMenuItemToggleType.CheckBox);
-        }
+        return true;
+    }
 
-        StartHotkeys();
+    /// <summary>
+    /// Перезапустить эфир с текущими настройками — так применяются аудио-устройство,
+    /// экран и экранная графика (раньше для этого требовалось закрывать приложение).
+    /// </summary>
+    private void RestartChannel()
+    {
+        try
+        {
+            var config = AppConfig.Load(_configPath);
+            ResolveMpvPath(config, AppContext.BaseDirectory);
+
+            if (_mode == ChannelMode.Production)
+                File.WriteAllText(Path.Combine(_configDir, "mpv.conf"), MpvConfig.Generate(config));
+
+            // Окно настроек держит ссылку на старое соединение — закрываем, чтобы
+            // «Сейчас в эфире» не показывало мёртвый канал.
+            _settingsWindow?.Close();
+
+            _controller?.Dispose();
+            _controller = null;
+            _supervisor?.Dispose();   // гасит свой mpv без события Exited
+            _supervisor = null;
+
+            _callMuted = false;
+            if (_callModeItem is not null)
+                _callModeItem.IsChecked = false;
+
+            if (!StartPlayback(config))
+                AppLog.ShowWarning("Папка с мультфильмами не указана или недоступна.\n\nОткрой «Настройки → Пути» и выбери папку.");
+            else
+                AppLog.Write("канал перезапущен из трея");
+        }
+        catch (Exception ex)
+        {
+            AppLog.ShowError($"Не удалось перезапустить канал.\n\n{ex.Message}");
+        }
     }
 
     // Подключение к mpv фоном: провал больше не теряется молча (иначе трей и хоткеи
@@ -333,6 +400,8 @@ public partial class App : Application
 
     private void OnToggleCall(object? sender, EventArgs e) => ToggleCallMute();
 
+    private void OnRestartChannel(object? sender, EventArgs e) => RestartChannel();
+
     // Общий тумблер «Режим созвона» для пункта трея И хоткея — одно состояние,
     // одна галочка (CallModeItem объявлен в App.axaml), чтобы клавиша и меню совпадали.
     private void ToggleCallMute()
@@ -348,7 +417,8 @@ public partial class App : Application
         // Окно грузит свежую копию конфига из файла (правки изолированы до «Сохранить»).
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(AppConfig.Load(_configPath), _configPath, _controller);
+            _settingsWindow = new SettingsWindow(
+                AppConfig.Load(_configPath), _configPath, _controller, RestartChannel);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
 

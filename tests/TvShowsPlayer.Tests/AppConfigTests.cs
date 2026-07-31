@@ -15,7 +15,7 @@ public class AppConfigTests
         c.Step.Should().Be(2);
         c.CapRotations.Should().Be(200);
         c.Volume.Should().Be(70);
-        c.FsScreen.Should().Be(1);
+        c.FsScreen.Should().Be(0);   // основной монитор: безопасно и на одноэкранной машине
         c.ChannelName.Should().Be("LocalTV");
         c.ExcludedShows.Should().BeEmpty();
     }

@@ -28,7 +28,9 @@ public sealed class AppConfig
     // Плеер
     public string? AudioDevice { get; set; }
     public int Volume { get; set; } = 70;
-    public int FsScreen { get; set; } = 1;
+    // 0 = основной монитор. Дефолт намеренно 0: на машине с одним экраном
+    // номер 1 не существует, и канал уезжал бы «в никуда».
+    public int FsScreen { get; set; }
 
     // OSD
     public bool ClockEnabled { get; set; } = true;
@@ -44,24 +46,61 @@ public sealed class AppConfig
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Загрузить из JSON; если файла нет — вернуть дефолты.</summary>
+    /// <summary>Резервная копия предыдущего конфига.</summary>
+    public static string BackupPath(string path) => path + ".bak";
+
+    /// <summary>
+    /// Загрузить из JSON. Если файл повреждён (обрыв записи, выключение питания) —
+    /// поднимаем предыдущую версию из <c>.bak</c>: иначе пользователь молча терял бы
+    /// все настройки (папку с библиотекой, порядок сериалов, исключения), а старт
+    /// падал бы с ошибкой разбора. Файла нет — обычные дефолты.
+    /// </summary>
     public static AppConfig Load(string path)
     {
-        if (!File.Exists(path))
-            return new AppConfig();
-
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? new AppConfig();
+        return TryLoad(path) ?? TryLoad(BackupPath(path)) ?? new AppConfig();
     }
 
-    /// <summary>Сохранить в JSON (с созданием папки).</summary>
+    private static AppConfig? TryLoad(string path)
+    {
+        if (!File.Exists(path))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), JsonOptions);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Сохранить атомарно: временный файл → подмена основного, предыдущая версия
+    /// уезжает в <c>.bak</c>. Обрыв записи не оставляет усечённый конфиг.
+    /// </summary>
     public void Save(string path)
     {
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        var json = JsonSerializer.Serialize(this, JsonOptions);
-        File.WriteAllText(path, json);
+        var tmp = path + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(this, JsonOptions));
+
+        if (!File.Exists(path))
+        {
+            File.Move(tmp, path);
+            return;
+        }
+
+        try
+        {
+            File.Replace(tmp, path, BackupPath(path), ignoreMetadataErrors: true);
+        }
+        catch (IOException)
+        {
+            File.Move(tmp, path, overwrite: true);
+        }
     }
 }

@@ -42,6 +42,7 @@ public static class MpvLaunchArgs
     private const string ConfigDirFlag = "--config-dir=";
     private const string IpcServerFlag = "--input-ipc-server=";
     private const string NoFullscreenFlag = "--fullscreen=no";
+    private const string IdleFlag = "--idle=yes";
 
     // Каждая опция скрипта передаётся ОТДЕЛЬНЫМ --script-opts-append: в общем
     // --script-opts запятая разделяет пары, и путь вроде «D:\Мультфильмы, сериалы»
@@ -54,6 +55,10 @@ public static class MpvLaunchArgs
         {
             ConfigDirFlag + options.ConfigDir,
             IpcServerFlag + options.PipePath,
+            // Гарантия на уровне запуска (не только prod-конфига): пустой или временно
+            // недоступный плейлист не должен закрывать mpv, иначе следом закрывается
+            // и приложение — канал исчезает вместо ожидания.
+            IdleFlag,
         };
 
         AddScriptOpt(args, "channelosd-root", options.ChannelOsdRoot);

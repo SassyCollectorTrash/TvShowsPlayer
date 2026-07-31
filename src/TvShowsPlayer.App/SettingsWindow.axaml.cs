@@ -24,6 +24,7 @@ public partial class SettingsWindow : Window
     private readonly AppConfig _config;
     private readonly string _configPath;
     private readonly MpvController? _controller;
+    private readonly Action? _startChannel;
 
     private readonly Dictionary<string, Show> _showsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<ShowRow> _showRows = new();
@@ -55,11 +56,13 @@ public partial class SettingsWindow : Window
     {
     }
 
-    public SettingsWindow(AppConfig config, string configPath, MpvController? controller)
+    public SettingsWindow(AppConfig config, string configPath, MpvController? controller,
+        Action? startChannel = null)
     {
         _config = config;
         _configPath = configPath;
         _controller = controller;
+        _startChannel = startChannel;
         AvaloniaXamlLoader.Load(this);
         DataContext = _config;
 
@@ -76,6 +79,11 @@ public partial class SettingsWindow : Window
         _updateButton = this.FindControl<Button>("UpdateButton")!;
         _checkUpdateButton = this.FindControl<Button>("CheckUpdateButton")!;
         _versionText.Text = $"{Branding.AppName} v{AppVersion.ToString(3)}";
+
+        // Эфира нет (первый запуск: папка ещё не выбрана) — даём кнопку прямо здесь,
+        // иначе пользователю негде запустить канал после выбора папки.
+        var startButton = this.FindControl<Button>("StartChannelButton")!;
+        startButton.IsVisible = _controller is null && _startChannel is not null;
         Closed += (_, _) => _closing.Cancel();   // не дописываем в контролы закрытого окна
 
         _ = PopulateAudioDevicesAsync();
@@ -531,14 +539,29 @@ public partial class SettingsWindow : Window
             box.Text = text;
     }
 
-    // ---- сохранить ----
+    // ---- сохранить / запустить ----
     private void OnSave(object? sender, RoutedEventArgs e)
     {
         ApplyShowConfig();
         if (!string.IsNullOrEmpty(_configPath))
             _config.Save(_configPath);
 
-        _status.Text = $"Сохранено · {DateTime.Now:HH:mm:ss}.";
+        _status.Text = _controller is null
+            ? "Сохранено. Теперь нажми «Запустить канал»."
+            : $"Сохранено · {DateTime.Now:HH:mm:ss}. Аудио, экран и OSD применятся после «Перезапустить канал» в трее.";
+    }
+
+    private void OnStartChannel(object? sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_config.CartoonsRoot) || !Directory.Exists(_config.CartoonsRoot))
+        {
+            _status.Text = "Сначала укажи папку с мультфильмами на вкладке «Пути».";
+            return;
+        }
+
+        OnSave(sender, e);       // канал стартует по сохранённому конфигу
+        _startChannel?.Invoke();
+        Close();                 // связь с mpv в этом окне уже устарела — переоткроем свежим
     }
 }
 

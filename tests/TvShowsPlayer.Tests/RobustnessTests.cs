@@ -126,6 +126,104 @@ public class RobustnessTests : IDisposable
         ChannelBuilder.Build(options).Rebuilt.Should().BeFalse();
     }
 
+    // --- конфиг: обрыв записи не должен стоить пользователю всех настроек ---
+
+    [Fact]
+    public void Config_CorruptFile_RecoversFromBackup()
+    {
+        var path = Path.Combine(_root, "appconfig.json");
+        new AppConfig { CartoonsRoot = @"C:\Cartoons", ShowOrder = { "Геркулес" } }.Save(path);
+        new AppConfig { CartoonsRoot = @"C:\Cartoons2" }.Save(path);   // появится .bak
+
+        File.WriteAllText(path, "{\"CartoonsRoot\":\"C:\\\\Car");      // запись оборвалась
+
+        var config = AppConfig.Load(path);
+
+        config.CartoonsRoot.Should().Be(@"C:\Cartoons", "настройки поднимаются из резервной копии");
+    }
+
+    [Fact]
+    public void Config_CorruptWithoutBackup_FallsBackToDefaults_NotThrows()
+    {
+        var path = Path.Combine(_root, "appconfig.json");
+        File.WriteAllText(path, "не json вообще");
+
+        var act = () => AppConfig.Load(path);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Config_DefaultScreen_IsPrimary()
+    {
+        // на машине с одним монитором экрана №1 не существует
+        new AppConfig().FsScreen.Should().Be(0);
+    }
+
+    [Fact]
+    public void MpvConfig_KeepsPlayerAliveWhenNothingToPlay()
+    {
+        // иначе пустой/недоступный плейлист закрывает mpv, а следом и приложение
+        MpvConfig.Generate(new AppConfig()).Should().Contain("idle=yes");
+    }
+
+    [Fact]
+    public void LaunchArgs_AlwaysKeepPlayerAlive_InBothModes()
+    {
+        // dev-режим запускается БЕЗ mpv.conf — гарантия должна быть в аргументах
+        var args = MpvLaunchArgs.Build(new MpvLaunchOptions
+        {
+            ConfigDir = @"C:\cfg",
+            Playlist = @"C:\cfg\channel.m3u",
+            PipePath = @"\\.\pipe\x",
+        });
+
+        args.Should().Contain("--idle=yes");
+    }
+
+    // --- библиотека временно недоступна ---
+
+    [Fact]
+    public void Build_WhenLibraryUnavailable_KeepsExistingPlaylist()
+    {
+        var lib = Directory.CreateDirectory(Path.Combine(_root, "lib")).FullName;
+        var show = Directory.CreateDirectory(Path.Combine(lib, "Сериал")).FullName;
+        for (var i = 1; i <= 6; i++)
+            File.WriteAllText(Path.Combine(show, $"S01E{i:00}.mkv"), "");
+
+        var playlist = Path.Combine(_root, "channel.m3u");
+        var options = new ChannelBuildOptions
+        {
+            Root = lib,
+            PlaylistPath = playlist,
+            StatePath = Path.Combine(_root, "state.json"),
+        };
+
+        ChannelBuilder.Build(options);
+        var before = File.ReadAllLines(playlist).Length;
+
+        Directory.Delete(lib, recursive: true);   // «диск отвалился»
+        var result = ChannelBuilder.Build(options);
+
+        result.LibraryMissing.Should().BeTrue();
+        result.Rebuilt.Should().BeFalse();
+        File.ReadAllLines(playlist).Length.Should().Be(before);
+    }
+
+    [Fact]
+    public void Build_WhenLibraryNotConfigured_ReportsMissingLibrary()
+    {
+        var result = ChannelBuilder.Build(new ChannelBuildOptions
+        {
+            Root = "",
+            PlaylistPath = Path.Combine(_root, "channel.m3u"),
+            StatePath = Path.Combine(_root, "state.json"),
+        });
+
+        result.LibraryMissing.Should().BeTrue();
+        File.Exists(Path.Combine(_root, "channel.m3u")).Should().BeFalse();
+    }
+
     // --- карусель: чужой засев не должен ронять сборку ---
 
     [Fact]

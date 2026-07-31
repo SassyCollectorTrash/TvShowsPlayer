@@ -21,6 +21,9 @@ public sealed record ChannelBuildResult
 {
     /// <summary>false — состав не менялся, пересборки не было (state не тронут).</summary>
     public bool Rebuilt { get; init; }
+
+    /// <summary>Библиотека не указана или недоступна — плейлист намеренно не трогали.</summary>
+    public bool LibraryMissing { get; init; }
     public int ShowCount { get; init; }
     public int PlaylistLength { get; init; }
     public bool Capped { get; init; }
@@ -36,6 +39,12 @@ public static class ChannelBuilder
 {
     public static ChannelBuildResult Build(ChannelBuildOptions options)
     {
+        // Библиотека не указана или недоступна (внешний диск не подключён к моменту
+        // автозапуска, папку переименовали) — НЕ трогаем существующий плейлист:
+        // иначе рабочий канал заменялся бы пустым, а состав «менялся» на глазах.
+        if (string.IsNullOrWhiteSpace(options.Root) || !Directory.Exists(options.Root))
+            return new ChannelBuildResult { Rebuilt = false, LibraryMissing = true };
+
         var shows = ShowOrdering.Apply(
             ShowScanner.Scan(options.Root, options.ExcludedShows), options.ShowOrder);
 

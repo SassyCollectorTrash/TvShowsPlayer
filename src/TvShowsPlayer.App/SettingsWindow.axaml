@@ -271,16 +271,18 @@
     </TabControl>
 
     <Border Grid.Row="1" Background="#2b2d31" Padding="20,14">
-      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
         <TextBlock x:Name="VersionText" Grid.Column="0" VerticalAlignment="Center"
                    Foreground="#949ba4" FontSize="13" />
         <Button x:Name="UpdateButton" Grid.Column="1" Classes="accent" Content="Скачать обновление"
                 IsVisible="False" Click="OnOpenReleases" Margin="12,0,0,0" Padding="12,6" />
         <TextBlock x:Name="StatusText" Grid.Column="2" VerticalAlignment="Center" Margin="16,0"
                    Foreground="#949ba4" FontSize="13" TextTrimming="CharacterEllipsis" />
-        <Button x:Name="CheckUpdateButton" Grid.Column="3" Content="Проверить обновления"
+        <Button x:Name="StartChannelButton" Grid.Column="3" Classes="accent" Content="Запустить канал"
+                IsVisible="False" Click="OnStartChannel" Margin="0,0,12,0" />
+        <Button x:Name="CheckUpdateButton" Grid.Column="4" Content="Проверить обновления"
                 Click="OnCheckUpdates" Margin="0,0,12,0" />
-        <Button Grid.Column="4" Classes="accent" Content="Сохранить" Click="OnSave" />
+        <Button Grid.Column="5" Classes="accent" Content="Сохранить" Click="OnSave" />
       </Grid>
     </Border>
   </Grid>

@@ -71,6 +71,9 @@ public sealed class MpvSupervisor : IDisposable
 
         try
         {
+            // Гасим СВОЙ mpv осознанно — событие Exited здесь не нужно, иначе
+            // перезапуск канала выглядел бы как «mpv умер» и закрывал приложение.
+            _process.EnableRaisingEvents = false;
             if (!_process.HasExited)
                 _process.Kill(entireProcessTree: true);
         }

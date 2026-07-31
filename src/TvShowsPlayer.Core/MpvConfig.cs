@@ -18,6 +18,9 @@ public static class MpvConfig
         sb.AppendLine($"fs-screen={config.FsScreen}");
         sb.AppendLine("loop-playlist=inf");
         sb.AppendLine("keep-open=no");
+        // Канал не должен умирать, если плейлист пуст или файлы временно недоступны
+        // (внешний диск не подключён к моменту автозапуска): mpv ждёт, а не выходит.
+        sb.AppendLine("idle=yes");
         sb.AppendLine("osc=no");
         sb.AppendLine("osd-level=0");
         sb.AppendLine("border=no");
