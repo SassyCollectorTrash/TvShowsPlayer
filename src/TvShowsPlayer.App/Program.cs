@@ -22,7 +22,9 @@ internal static class Program
 
         try
         {
+            AppLog.Write($"запуск: {Environment.ProcessPath}");
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+            AppLog.Write("работа завершена штатно");
         }
         catch (Exception ex)
         {

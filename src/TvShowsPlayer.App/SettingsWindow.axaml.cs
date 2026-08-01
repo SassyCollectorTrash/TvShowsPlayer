@@ -25,6 +25,8 @@ public partial class SettingsWindow : Window
     private readonly string _configPath;
     private readonly MpvController? _controller;
     private readonly Action? _startChannel;
+    private readonly Action? _quitForUpdate;
+    private UpdateInfo? _update;
 
     private readonly Dictionary<string, Show> _showsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<ShowRow> _showRows = new();
@@ -60,12 +62,13 @@ public partial class SettingsWindow : Window
     }
 
     public SettingsWindow(AppConfig config, string configPath, MpvController? controller,
-        Action? startChannel = null)
+        Action? startChannel = null, Action? quitForUpdate = null)
     {
         _config = config;
         _configPath = configPath;
         _controller = controller;
         _startChannel = startChannel;
+        _quitForUpdate = quitForUpdate;
         AvaloniaXamlLoader.Load(this);
         DataContext = _config;
 
@@ -197,6 +200,63 @@ public partial class SettingsWindow : Window
     private async void OnCheckUpdates(object? sender, RoutedEventArgs e) =>
         await CheckUpdatesAsync(silent: false);
 
+    /// <summary>
+    /// Обновиться одной кнопкой: скачать, проверить и заменить файлы. Если к релизу
+    /// не приложен архив или что-то не вышло — открываем страницу, чтобы человек не
+    /// остался ни с чем.
+    /// </summary>
+    private async void OnUpdate(object? sender, RoutedEventArgs e)
+    {
+        if (_update is not { CanInstall: true } update)
+        {
+            OnOpenReleases(sender, e);
+            return;
+        }
+
+        try
+        {
+            _updateButton.IsEnabled = false;
+            _status.Text = "Скачиваю обновление…";
+
+            var progress = new Progress<int>(p => _status.Text = $"Скачиваю обновление… {p}%");
+            var archive = await UpdateInstaller.DownloadAsync(Http, update, progress, _closing.Token);
+            if (archive is null)
+            {
+                Fail("Не получилось скачать обновление");
+                return;
+            }
+
+            _status.Text = "Проверяю скачанное…";
+            var installDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+            var newVersion = await Task.Run(() => UpdateInstaller.PrepareNewVersion(archive, installDir));
+            if (newVersion is null)
+            {
+                Fail("Скачанный файл не похож на программу");
+                return;
+            }
+            AppLog.Write($"обновление до {update.Version}: подменяю файлы в {installDir}");
+
+            UpdateInstaller.LaunchSwap(newVersion, installDir, Environment.ProcessId);
+            _status.Text = "Закрываю программу для обновления…";
+
+            // Программа должна уйти: сценарий ждёт именно её завершения, а затем
+            // запустит уже обновлённую.
+            _quitForUpdate?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"обновление не удалось: {ex.Message}");
+            Fail("Не получилось обновиться");
+        }
+
+        void Fail(string message)
+        {
+            _status.Text = message + " — открываю страницу загрузки";
+            _updateButton.IsEnabled = true;
+            OnOpenReleases(sender, e);
+        }
+    }
+
     private void OnOpenReleases(object? sender, RoutedEventArgs e)
     {
         // ссылка приходит из ответа GitHub — открываем только https, иначе свою страницу
@@ -247,10 +307,15 @@ public partial class SettingsWindow : Window
 
             if (UpdateChecker.HasUpdate(AppVersion, info))
             {
+                _update = info;
                 _releaseUrl = info.ReleaseUrl ?? Branding.ReleasesUrl;
-                _updateButton.Content = $"Скачать версию {info.Version.ToString(3)}";
+                _updateButton.Content = info.CanInstall
+                    ? $"Обновить до {info.Version.ToString(3)}"
+                    : $"Открыть страницу версии {info.Version.ToString(3)}";
                 _updateButton.IsVisible = true;
-                _status.Text = $"Вышла новая версия {info.Version.ToString(3)} — можно скачать";
+                _status.Text = info.CanInstall
+                    ? $"Вышла версия {info.Version.ToString(3)} — программа обновится сама и перезапустится"
+                    : $"Вышла версия {info.Version.ToString(3)}";
             }
             else
             {

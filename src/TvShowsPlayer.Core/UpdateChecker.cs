@@ -3,8 +3,20 @@ using System.Text.Json;
 
 namespace TvShowsPlayer.Core;
 
-/// <summary>Последний релиз с GitHub: разобранная версия и ссылка на страницу.</summary>
-public sealed record UpdateInfo(Version Version, string? ReleaseUrl);
+/// <summary>
+/// Последний релиз с GitHub: версия, ссылка на страницу и — если к релизу приложен
+/// архив — прямая ссылка на него и его размер (нужны, чтобы обновиться одной кнопкой).
+/// </summary>
+public sealed record UpdateInfo(
+    Version Version,
+    string? ReleaseUrl,
+    string? DownloadUrl = null,
+    long DownloadSize = 0,
+    string? FileName = null)
+{
+    /// <summary>Можно ли обновиться прямо из программы (к релизу приложен архив).</summary>
+    public bool CanInstall => !string.IsNullOrEmpty(DownloadUrl);
+}
 
 /// <summary>
 /// Итог проверки обновлений. «Не достучались» и «релизов ещё нет» — разные вещи:
@@ -48,7 +60,10 @@ public static class UpdateChecker
                       && urlEl.ValueKind == JsonValueKind.String
                 ? urlEl.GetString()
                 : null;
-            return new UpdateInfo(version, url);
+
+            var asset = FindArchive(doc.RootElement);
+
+            return new UpdateInfo(version, url, asset.Url, asset.Size, asset.Name);
         }
         catch (JsonException)
         {
@@ -93,6 +108,41 @@ public static class UpdateChecker
         {
             return UpdateCheck.Unreachable;   // проверка обновлений не должна ломать приложение
         }
+    }
+
+    /// <summary>Приложенный к релизу zip-архив программы (первый подходящий).</summary>
+    private static (string? Url, long Size, string? Name) FindArchive(JsonElement release)
+    {
+        if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+            return (null, 0, null);
+
+        foreach (var asset in assets.EnumerateArray())
+        {
+            if (asset.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var name = asset.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String
+                ? n.GetString()
+                : null;
+
+            if (name is null || !name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var url = asset.TryGetProperty("browser_download_url", out var u) && u.ValueKind == JsonValueKind.String
+                ? u.GetString()
+                : null;
+
+            if (url is null)
+                continue;
+
+            var size = asset.TryGetProperty("size", out var s) && s.ValueKind == JsonValueKind.Number
+                ? s.GetInt64()
+                : 0;
+
+            return (url, size, name);
+        }
+
+        return (null, 0, null);
     }
 
     private static Version? ParseVersion(string? tag)

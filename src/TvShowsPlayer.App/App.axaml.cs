@@ -60,6 +60,7 @@ public partial class App : Application
             // портится. Молча уходим, канал уже работает.
             if (!TryAcquireSingleInstance())
             {
+                AppLog.Write("канал уже запущен — второй экземпляр не нужен, выхожу");
                 Environment.Exit(0);
                 return;
             }
@@ -96,12 +97,20 @@ public partial class App : Application
     }
 
     // Один канал на режим (dev и prod не мешают друг другу — имена разные).
+    // Ждём освобождения несколько секунд, а не отказываем сразу: предыдущий экземпляр
+    // может ещё завершаться — при обновлении или когда человек закрыл программу и тут
+    // же открыл снова. Мгновенный отказ выглядел бы как «не запускается вообще».
     private bool TryAcquireSingleInstance()
     {
         try
         {
-            _instanceLock = new Mutex(initiallyOwned: true, $@"Local\{Branding.AppName}-{_mode}", out var isNew);
-            return isNew;
+            _instanceLock = new Mutex(initiallyOwned: false, $@"Local\{Branding.AppName}-{_mode}");
+
+            return _instanceLock.WaitOne(TimeSpan.FromSeconds(15));
+        }
+        catch (AbandonedMutexException)
+        {
+            return true;   // прежний экземпляр умер не попрощавшись — место свободно
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
@@ -931,7 +940,8 @@ public partial class App : Application
         if (_settingsWindow is null)
         {
             _settingsWindow = new SettingsWindow(
-                AppConfig.Load(_configPath), _configPath, _controller, RestartChannel);
+                AppConfig.Load(_configPath), _configPath, _controller, RestartChannel,
+                quitForUpdate: () => _ = QuitAsync());
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
 

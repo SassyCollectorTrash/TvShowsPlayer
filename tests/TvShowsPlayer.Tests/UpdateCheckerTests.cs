@@ -66,6 +66,46 @@ public class UpdateCheckerTests
         UpdateChecker.Parse(ReleaseJson("latest")).Should().BeNull();
     }
 
+    // --- ссылка на архив: без неё обновиться одной кнопкой нельзя ---
+
+    private const string WithAsset = """
+    {
+      "tag_name": "v1.3.0",
+      "html_url": "https://example/release",
+      "assets": [
+        { "name": "исходники.txt", "browser_download_url": "https://example/txt", "size": 10 },
+        { "name": "LocalTV.zip", "browser_download_url": "https://example/LocalTV.zip", "size": 89599293 }
+      ]
+    }
+    """;
+
+    [Fact]
+    public void Parse_ReleaseWithArchive_ExposesDirectLink()
+    {
+        var info = UpdateChecker.Parse(WithAsset)!;
+
+        info.DownloadUrl.Should().Be("https://example/LocalTV.zip");
+        info.FileName.Should().Be("LocalTV.zip");
+        info.DownloadSize.Should().Be(89599293);
+        info.CanInstall.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Parse_ReleaseWithoutArchive_CannotInstallItself()
+    {
+        var info = UpdateChecker.Parse(ReleaseJson("v1.3.0"))!;
+
+        info.CanInstall.Should().BeFalse("тогда остаётся только открыть страницу релиза");
+    }
+
+    [Fact]
+    public void Parse_AssetsBroken_DoesNotThrow()
+    {
+        var json = "{\"tag_name\":\"v1.3.0\",\"assets\":\"не список\"}";
+
+        UpdateChecker.Parse(json)!.CanInstall.Should().BeFalse();
+    }
+
     [Fact]
     public void Check_NoReleasesPublishedYet_IsNotANetworkProblem()
     {

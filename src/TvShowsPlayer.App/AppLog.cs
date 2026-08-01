@@ -15,7 +15,11 @@ internal static class AppLog
     private const int MbIconWarning = 0x00000030;
     private const int MbIconInformation = 0x00000040;
 
-    private static string? _logPath;
+    // До того как выяснится папка настроек, пишем во временную: иначе ошибка на самом
+    // раннем этапе (не запустилось окно, не хватило прав) не оставляет НИКАКОГО следа —
+    // программа просто «мигает и исчезает».
+    private static string? _logPath =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "localtv-startup.log");
 
     /// <summary>Вести ли журнал (настройка пользователя). Сообщения об ошибках
     /// показываются в любом случае — их прячут только из файла.</summary>
