@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace TvShowsPlayer.App;
 
 /// <summary>
-/// Убирает окно mpv из панели задач и Alt-Tab (канал-«киоск») — как AHK-версия:
+/// Убирает окно mpv из панели задач и Alt-Tab (канал-«киоск»):
 /// +WS_EX_TOOLWINDOW, −WS_EX_APPWINDOW, затем Hide/Show, чтобы стиль применился.
 /// </summary>
 internal static class WindowStyler

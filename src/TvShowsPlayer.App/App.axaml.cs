@@ -12,7 +12,7 @@ namespace TvShowsPlayer.App;
 /// <summary>
 /// Трей-приложение канала (dev-срез 1B): поднимает СВОЙ mpv (отдельный pipe,
 /// оконный, dev config-dir с channel-osd.lua, но БЕЗ resume.lua — закладка живого
-/// AHK-канала не трогается) и управляет им из трея с паритетом меню AHK.
+/// не пересекается с боевым каналом) и управляет им из значка у часов.
 /// Меню объявлено в App.axaml; иконка динамическая (из mpv.exe). Трей-flyout рисуется
 /// только при наличии темы (FluentTheme в App.axaml) — без неё пункты меню без
 /// шаблонов и popup всплывает «нулевого» размера.
@@ -140,14 +140,7 @@ public partial class App : Application
             if (string.IsNullOrEmpty(localAppData))   // без %LOCALAPPDATA% не кладём конфиг в CWD
                 localAppData = appDir;
 
-            LegacyConfigMigration.Run(localAppData);   // разовый перенос со старого имени (Jetix → LocalTV)
-            Autostart.MigrateLegacyName();             // и автозапуск-ключ реестра
-
-            // Если перенос папки не удался (напр. занята) — работаем со старой, а имя
-            // файла состояния приводим к каноничному ИМЕННО в ней: resume.lua пишет
-            // только каноничное имя, иначе прогресс не будет виден и будет затёрт.
             configDir = ChannelPaths.ResolveConfigDir(localAppData);
-            LegacyConfigMigration.RenameStateFile(configDir);
         }
         else
         {
@@ -513,7 +506,7 @@ public partial class App : Application
 
     // Скрытое окно (1×1, off-screen) — даёт HWND для RegisterHotKey и приёма WM_HOTKEY.
     // dev-режим = Ctrl+Alt+SHIFT+клавиша, чтобы не конфликтовать с хоткеями живого
-    // AHK-канала (у него те же комбо без Shift).
+    // боевого канала, если он запущен параллельно.
     private void StartHotkeys(AppConfig config)
     {
         if (!config.HotkeysEnabled)
@@ -541,7 +534,7 @@ public partial class App : Application
         _wndProcHook = OnWndProc;
         Win32Properties.AddWndProcHookCallback(_hotkeyWindow, _wndProcHook);
 
-        // Dev = Ctrl+Alt+Shift+… (сосуществование с живым AHK), Prod = боевые комбо.
+        // Dev = Ctrl+Alt+Shift+… (чтобы не отбирать клавиши у боевого канала).
         var hotkeyMode = _mode == ChannelMode.Production ? HotkeyMode.Production : HotkeyMode.Dev;
         var bindings = Hotkeys.ForMode(hotkeyMode, config.HotkeyModifiers);
         _hotkeys = new GlobalHotkeys(hwnd, bindings, OnHotkey);
@@ -643,7 +636,7 @@ public partial class App : Application
     }
 
     // Режим: env LOCALTV_MODE перекрывает; иначе Debug→Dev, Release→Prod. Гарантия —
-    // локальные Debug-запуски по умолчанию Dev и не трогают живой AHK-канал.
+    // локальные Debug-запуски по умолчанию Dev и не мешают боевому каналу.
     private static ChannelMode ResolveMode()
     {
         var env = Environment.GetEnvironmentVariable("LOCALTV_MODE");
@@ -971,7 +964,7 @@ public partial class App : Application
     }
 
     // Проигрыватель закрылся сам (упал или его прибила посторонняя программа — старый
-    // скриптовый кит делал `taskkill /IM mpv.exe`). Для круглосуточного канала правильно
+    // посторонняя программа может закрыть его по имени процесса). Для круглосуточного канала
     // подняться заново, а не тихо исчезнуть из трея. Но если это повторяется — сдаёмся
     // и говорим об этом, чтобы не крутить бесконечный цикл перезапусков.
     private void OnMpvExited(object? sender, EventArgs e)
@@ -1009,7 +1002,7 @@ public partial class App : Application
             AppLog.ShowError(
                 "Проигрыватель несколько раз подряд закрылся сам.\n\n" +
                 "Обычно так бывает, если его закрывает другая программа — например, старая " +
-                "версия канала на AutoHotkey. Закрой её и запусти LocalTV снова.");
+                "другая программа воспроизведения. Закрой её и запусти LocalTV снова.");
             Shutdown();
             return;
         }

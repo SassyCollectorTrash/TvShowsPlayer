@@ -22,8 +22,8 @@ public sealed class CarouselResult
 }
 
 /// <summary>
-/// Карусель с нахлёстом (round-robin со скользящим окном). Порт build() из
-/// generate_playlist.py. Каждый сериал по очереди отдаёт блок из window серий,
+/// Карусель с нахлёстом (round-robin со скользящим окном).
+/// Каждый сериал по очереди отдаёт блок из window серий,
 /// затем закладка сдвигается на step; нахлёст = window − step.
 /// </summary>
 public static class Carousel

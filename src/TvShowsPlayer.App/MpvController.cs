@@ -217,7 +217,7 @@ public sealed class MpvController : IDisposable
     }
 
     // Связь с mpv рвётся не только когда он закрылся: посторонняя программа может
-    // убить процесс (старый скриптовый кит делал `taskkill /IM mpv.exe`), да и сам
+    // убить процесс (например, закрыв все плееры по имени), да и сам
     // канал перезапускается. Молчать до перезапуска приложения нельзя — переподключаемся.
     private static bool IsConnectionLost(Exception ex) =>
         ex is IOException or ObjectDisposedException or MpvIpcException;

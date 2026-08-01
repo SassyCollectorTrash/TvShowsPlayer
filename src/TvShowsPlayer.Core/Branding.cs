@@ -1,22 +1,18 @@
 namespace TvShowsPlayer.Core;
 
 /// <summary>
-/// Единые константы бренда и путей — чтобы имя не было «магической строкой»,
-/// разбросанной по коду. <see cref="LegacyAppName"/> нужен только для разовой
-/// миграции данных со старого имени (см. <see cref="LegacyConfigMigration"/>).
+/// Единые константы имени программы и её путей — чтобы они не были «магическими
+/// строками», разбросанными по коду.
 /// </summary>
 public static class Branding
 {
     public const string AppName = "LocalTV";
-    public const string LegacyAppName = "Jetix";
 
     // Файл состояния (прогресс по сериалам + позиция плейлиста) внутри config-dir.
     public const string StateFileName = "localtv-channel-state.json";
-    public const string LegacyStateFileName = "jetix-channel-state.json";
 
-    // Имя значения автозапуска в HKCU\...\Run (старое — только для миграции).
+    // Имя значения автозапуска в HKCU\...\Run.
     public const string AutostartValueName = AppName;
-    public const string LegacyAutostartValueName = "JETIX";
 
     // Именованный pipe mpv JSON-IPC (dev — отдельный, чтобы не пересекаться с prod).
     public const string PipeName = "localtvmpv";

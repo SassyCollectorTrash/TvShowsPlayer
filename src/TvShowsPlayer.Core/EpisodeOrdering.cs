@@ -4,7 +4,6 @@ namespace TvShowsPlayer.Core;
 
 /// <summary>
 /// Порядок серий внутри сериала по относительным путям файлов.
-/// Порт логики из generate_playlist.py.
 ///
 /// Сезон берётся из папки-сезона, если она есть (она авторитетнее — переживает
 /// опечатки в SxxExx вроде S21E07 в папке «Сезон 2»); иначе из SxxExx/NxNN.
@@ -70,7 +69,7 @@ public static class EpisodeOrdering
         return int.Parse(g);
     }
 
-    /// <summary>Какой схемой распознан порядок (для dry-run). Порт detection_label().</summary>
+    /// <summary>Какой схемой распознан порядок (для вкладки «Проверка серий»).</summary>
     public static string DetectionLabel(string rel)
     {
         var path = rel.Replace('/', '\\');
@@ -86,7 +85,7 @@ public static class EpisodeOrdering
         return "№ в имени файла";
     }
 
-    /// <summary>Файлы с сезоном в имени (SxxExx), не совпавшим с папкой-сезоном. Порт find_season_anomalies().</summary>
+    /// <summary>Файлы, где сезон в имени (SxxExx) не совпал с папкой-сезоном.</summary>
     public static IReadOnlyList<SeasonAnomaly> FindSeasonAnomalies(IEnumerable<string> relativePaths)
     {
         var result = new List<SeasonAnomaly>();
@@ -125,7 +124,7 @@ internal sealed class NaturalKey : IComparable<NaturalKey>
 {
     private static readonly Regex Digits = new(@"(\d+)", RegexOptions.Compiled);
 
-    private readonly object[] _segments;   // long | string, чередуются как в Python re.split
+    private readonly object[] _segments;   // числа и текст вперемешку, как в имени файла
 
     private NaturalKey(object[] segments) => _segments = segments;
 

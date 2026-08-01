@@ -3,8 +3,7 @@ namespace TvShowsPlayer.Core;
 /// <summary>
 /// Скан корня с сериалами: каждая подпапка — сериал, внутри рекурсивно ищутся
 /// видеофайлы и упорядочиваются через <see cref="EpisodeOrdering"/>. Папки без
-/// видео пропускаются, сериалы — в натуральном порядке имён. Порт
-/// scan_shows()/gather_show_episodes() из generate_playlist.py.
+/// видео пропускаются, сериалы — в натуральном порядке имён.
 /// </summary>
 public static class ShowScanner
 {
@@ -32,7 +31,7 @@ public static class ShowScanner
     /// <summary>
     /// Скан корня: подпапка = сериал, внутри рекурсивно видеофайлы по порядку.
     /// <paramref name="excluded"/> — имена сериалов вне карусели (качаются/неполные;
-    /// без регистра, с тримом). Зеркало Python <c>scan_shows(root, exclude)</c>.
+    /// без регистра, с тримом).
     /// </summary>
     /// <param name="settleAfter">Сколько файл должен пролежать без изменений, чтобы
     /// попасть в эфир (защита от недокачанных серий). <c>null</c> — не проверять.</param>
@@ -104,7 +103,7 @@ public static class ShowScanner
         skippedFiles = all.Count - ready.Count;
         var files = ready.Select(f => f.FullName).ToList();
 
-        // Порядок считаем по путям ОТНОСИТЕЛЬНО папки сериала (как в Python): так
+        // Порядок считаем по путям ОТНОСИТЕЛЬНО папки сериала: так
         // имя самого сериала не влияет на распознавание сезона/номера, а на выходе
         // возвращаем восстановленные полные пути.
         var rels = files.Select(f => Path.GetRelativePath(showDir, f));

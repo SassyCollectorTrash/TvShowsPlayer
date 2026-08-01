@@ -55,7 +55,7 @@ public class ChannelStateTests
     [Fact]
     public void Load_KitFormatWithoutShowsOrCurrent_ReturnsEmptyProgress()
     {
-        // старый формат резюме кита — только позиция
+        // сокращённый файл состояния — только позиция, без карты сериалов
         var path = TempPath();
         File.WriteAllText(path, """{"playlist_pos":83,"time_pos":506.32}""");
         try

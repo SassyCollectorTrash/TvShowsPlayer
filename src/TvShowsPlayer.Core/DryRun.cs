@@ -1,6 +1,6 @@
 namespace TvShowsPlayer.Core;
 
-/// <summary>Отчёт по одному сериалу для dry-run.</summary>
+/// <summary>Отчёт по одному сериалу для проверки распознавания серий.</summary>
 public sealed record ShowReport
 {
     public required string Name { get; init; }
@@ -15,9 +15,9 @@ public sealed record ShowReport
 }
 
 /// <summary>
-/// Предпросмотр распознанного порядка без записи плейлиста: по каждому сериалу —
-/// число серий, схема распознавания, первые серии и аномалии сезонов. Порт
-/// dry_run() из generate_playlist.py (без печати — возвращает данные).
+/// Проверка распознанного порядка без изменения эфира: по каждому сериалу —
+/// число серий, схема распознавания, первые серии и аномалии сезонов.
+
 /// </summary>
 public static class DryRun
 {

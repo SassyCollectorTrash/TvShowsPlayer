@@ -2,8 +2,8 @@ namespace TvShowsPlayer.Core;
 
 /// <summary>
 /// Поиск серии в собранном плейлисте по идентичности — чтобы после пересборки канал
-/// продолжил РОВНО ту серию, что шла (а не начало карусели). Зеркало
-/// <c>current_episode_index</c> из generate_playlist.py.
+/// продолжил РОВНО ту серию, что шла, а не начало карусели.
+
 /// </summary>
 public static class PlaylistIndex
 {

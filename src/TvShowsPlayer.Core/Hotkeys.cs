@@ -18,7 +18,7 @@ public enum HotkeyMode
     /// <summary>Боевые комбо: Ctrl+Alt+клавиша.</summary>
     Production,
 
-    /// <summary>Dev: те же + Shift — не конфликтуют с хоткеями живого AHK-канала.</summary>
+    /// <summary>Dev: те же + Shift — не отбирают клавиши у боевого канала.</summary>
     Dev,
 }
 
@@ -38,7 +38,7 @@ public enum HotkeyModifiers
 public sealed record HotkeyBinding(int Id, HotkeyModifiers Modifiers, uint VirtualKey, HotkeyAction Action);
 
 /// <summary>
-/// Набор глобальных хоткеев (паритет с <c>launch_channel.ahk</c>). Чистая таблица —
+/// Набор глобальных сочетаний клавиш. Чистая таблица —
 /// регистрацию и приём <c>WM_HOTKEY</c> делает App (Win32-граница).
 /// </summary>
 public static class Hotkeys
@@ -81,8 +81,6 @@ public static class Hotkeys
         return mods == HotkeyModifiers.None ? HotkeyModifiers.Control | HotkeyModifiers.Alt : mods;
     }
 
-    /// <summary>Привязки с пользовательским набором модификаторов (dev — плюс Shift,
-    /// чтобы не спорить с боевым каналом).</summary>
     /// <summary>Человеческое имя клавиши действия — чтобы сказать, что именно занято.</summary>
     public static string KeyName(HotkeyAction action) => action switch
     {
@@ -96,6 +94,8 @@ public static class Hotkeys
         _ => action.ToString(),
     };
 
+    /// <summary>Привязки с выбранным пользователем набором модификаторов (в отладочном
+    /// режиме добавляется Shift, чтобы не отбирать клавиши у боевого канала).</summary>
     public static IReadOnlyList<HotkeyBinding> ForMode(HotkeyMode mode, string? modifiers)
     {
         var mods = ParseModifiers(modifiers);
