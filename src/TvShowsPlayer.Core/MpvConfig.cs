@@ -16,12 +16,11 @@ public static class MpvConfig
         sb.AppendLine($"# Сгенерировано приложением {Branding.AppName} — меняй настройки в окне, не здесь.");
         sb.AppendLine("fullscreen=yes");
 
-        // Экран выбираем по имени, если оно известно: номера мониторов у разных
-        // программ нумеруются по-своему, и «экран 1» мог означать не тот дисплей.
-        if (!string.IsNullOrWhiteSpace(config.ScreenName))
-            sb.AppendLine($"fs-screen-name={config.ScreenName}");
-        else
-            sb.AppendLine($"fs-screen={config.FsScreen}");
+        // Экран задаётся ТОЛЬКО номером: выбор по имени проигрыватель на Windows
+        // молча игнорирует (проверено — окно всё равно открывалось на основном).
+        // Номер соответствует порядку мониторов в системе; имя выбранного экрана
+        // хранится отдельно, чтобы пересчитать номер, если мониторы переставили.
+        sb.AppendLine($"fs-screen={config.FsScreen}");
         sb.AppendLine("loop-playlist=inf");
         sb.AppendLine("keep-open=no");
         // Канал не должен умирать, если плейлист пуст или файлы временно недоступны

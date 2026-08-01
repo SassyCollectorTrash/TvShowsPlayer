@@ -141,8 +141,12 @@ public partial class SettingsWindow : Window
 
     private void OnScreenChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is ComboBox { SelectedItem: DisplayDevice screen })
-            _config.ScreenName = screen.DeviceName;
+        if (sender is not ComboBox { SelectedItem: DisplayDevice screen })
+            return;
+
+        // Проигрывателю нужен номер, имя храним для пересчёта номера в будущем.
+        _config.ScreenName = screen.DeviceName;
+        _config.FsScreen = screen.Index;
     }
 
     // Мониторы показываем по названию модели, а не номером: «Экран 1» ни о чём не

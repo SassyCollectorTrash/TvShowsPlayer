@@ -163,10 +163,13 @@ public partial class App : Application
 
         ProvisionScripts(configDir);
 
-        // Prod-каналу нужен mpv.conf (луп, alang, dynaudnorm, внешняя озвучка, fs-screen,
-        // аудио-устройство). Dev — без него: изоляция звука/лупа от живого канала.
+        // Prod-каналу нужен mpv.conf (луп, alang, dynaudnorm, внешняя озвучка, экран,
+        // аудио-устройство). Dev — без него: изоляция звука/лупа от боевого канала.
         if (isProd)
+        {
+            ResolveScreen(config);
             File.WriteAllText(Path.Combine(configDir, "mpv.conf"), MpvConfig.Generate(config));
+        }
 
         _configDir = configDir;
 
@@ -652,13 +655,43 @@ public partial class App : Application
 #endif
     }
 
-    private static void ResolveMpvPath(AppConfig config, string appDir)
+    /// <summary>
+    /// Пересчитать номер выбранного монитора по его имени: мониторы могли
+    /// переподключить или поменять местами, и прежний номер указывал бы не туда.
+    /// Монитор отключён — оставляем как есть, проигрыватель сам возьмёт основной.
+    /// </summary>
+    private static void ResolveScreen(AppConfig config)
+    {
+        if (DisplayDevices.IndexOf(config.ScreenName) is not { } index)
+        {
+            if (!string.IsNullOrWhiteSpace(config.ScreenName))
+                AppLog.Write($"выбранный экран {config.ScreenName} не найден — показываем на экране {config.FsScreen}");
+
+            return;
+        }
+
+        if (index != config.FsScreen)
+            AppLog.Write($"экран {config.ScreenName} теперь под номером {index} (был {config.FsScreen})");
+
+        config.FsScreen = index;
+    }
+
+    /// <summary>
+    /// Выбрать проигрыватель и ЗАПИСАТЬ выбор в настройки. Раньше подмена жила только
+    /// в памяти, и в окне настроек оставался прежний путь — человек видел одно, а
+    /// работало другое.
+    /// </summary>
+    private void ResolveMpvPath(AppConfig config, string appDir)
     {
         var chosen = MpvPathResolver.Resolve(config.MpvPath, appDir);
-        if (!string.Equals(chosen, config.MpvPath, StringComparison.OrdinalIgnoreCase))
-            AppLog.Write($"проигрыватель: {chosen} (в настройках было «{config.MpvPath}»)");
+        if (string.Equals(chosen, config.MpvPath, StringComparison.OrdinalIgnoreCase))
+            return;
 
+        AppLog.Write($"проигрыватель: {chosen} (в настройках было «{config.MpvPath}»)");
         config.MpvPath = chosen;
+
+        if (!string.IsNullOrEmpty(_configPath))
+            config.Save(_configPath);
     }
 
     // Провизионим Lua из бандла приложения (<appdir>/scripts) в config-dir по режиму:

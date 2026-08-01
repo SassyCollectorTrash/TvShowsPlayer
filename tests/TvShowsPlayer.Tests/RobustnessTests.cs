@@ -170,20 +170,14 @@ public class RobustnessTests : IDisposable
     }
 
     [Fact]
-    public void MpvConfig_WithChosenScreen_SelectsItByName()
+    public void MpvConfig_SelectsScreenByNumber_BecauseNameIsIgnoredOnWindows()
     {
-        var config = new AppConfig { ScreenName = @"\\.\DISPLAY2", FsScreen = 0 };
+        // Проверено на живой машине: fs-screen-name проигрыватель молча игнорирует,
+        // и канал открывался на основном мониторе вместо выбранного.
+        var generated = MpvConfig.Generate(new AppConfig { ScreenName = @"\\.\DISPLAY2", FsScreen = 1 });
 
-        var generated = MpvConfig.Generate(config);
-
-        generated.Should().Contain(@"fs-screen-name=\\.\DISPLAY2");
-        generated.Should().NotContain("fs-screen=", "номер экрана не должен спорить с именем");
-    }
-
-    [Fact]
-    public void MpvConfig_WithoutScreenName_FallsBackToNumber()
-    {
-        MpvConfig.Generate(new AppConfig { FsScreen = 1 }).Should().Contain("fs-screen=1");
+        generated.Should().Contain("fs-screen=1");
+        generated.Should().NotContain("fs-screen-name");
     }
 
     [Fact]

@@ -3,9 +3,10 @@ using System.Runtime.InteropServices;
 namespace TvShowsPlayer.App;
 
 /// <summary>
-/// Монитор: системное имя (его понимает mpv) и человеческое описание для списка.
+/// Монитор: системное имя (для запоминания выбора), его НОМЕР по порядку
+/// перечисления — именно номер понимает проигрыватель — и человеческое описание.
 /// </summary>
-public sealed record DisplayDevice(string DeviceName, string Description)
+public sealed record DisplayDevice(string DeviceName, int Index, string Description)
 {
     public override string ToString() => Description;
 }
@@ -23,11 +24,13 @@ internal static class DisplayDevices
 
         try
         {
+            // Порядок перечисления = нумерация экранов, которую понимает проигрыватель
+            // (проверено: экран №1 в этом списке — тот же, что у него).
             EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr monitor, IntPtr _, ref Rect _, IntPtr _) =>
             {
                 var info = new MonitorInfoEx { cbSize = Marshal.SizeOf<MonitorInfoEx>() };
                 if (GetMonitorInfo(monitor, ref info))
-                    devices.Add(Describe(info));
+                    devices.Add(Describe(info, devices.Count));
 
                 return true;
             }, IntPtr.Zero);
@@ -40,7 +43,7 @@ internal static class DisplayDevices
         return devices;
     }
 
-    private static DisplayDevice Describe(MonitorInfoEx info)
+    private static DisplayDevice Describe(MonitorInfoEx info, int index)
     {
         var width = info.rcMonitor.Right - info.rcMonitor.Left;
         var height = info.rcMonitor.Bottom - info.rcMonitor.Top;
@@ -57,7 +60,26 @@ internal static class DisplayDevices
 
         var description = $"{title} — {width}×{height}" + (isPrimary ? " (основной)" : string.Empty);
 
-        return new DisplayDevice(info.szDevice, description);
+        return new DisplayDevice(info.szDevice, index, description);
+    }
+
+    /// <summary>
+    /// Номер выбранного монитора для проигрывателя. Мониторы могут переподключить или
+    /// поменять местами, поэтому номер вычисляем по сохранённому имени заново.
+    /// Не нашли (монитор отключили) — <c>null</c>.
+    /// </summary>
+    public static int? IndexOf(string? deviceName)
+    {
+        if (string.IsNullOrWhiteSpace(deviceName))
+            return null;
+
+        foreach (var device in List())
+        {
+            if (string.Equals(device.DeviceName, deviceName, StringComparison.OrdinalIgnoreCase))
+                return device.Index;
+        }
+
+        return null;
     }
 
     /// <summary>Модель монитора («Dell S2721D») из описания устройства отображения.</summary>
