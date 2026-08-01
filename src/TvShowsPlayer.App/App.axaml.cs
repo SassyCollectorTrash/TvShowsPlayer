@@ -33,6 +33,7 @@ public partial class App : Application
     private Mutex? _instanceLock;
     private DispatcherTimer? _volumeSaveTimer;
     private DispatcherTimer? _hotkeyRetryTimer;
+    private DispatcherTimer? _taskbarTimer;
     private string _lastBuildNotice = string.Empty;
     private string _hotkeyWarning = string.Empty;
     private const int MaxUnexpectedExits = 3;
@@ -315,6 +316,7 @@ public partial class App : Application
         {
             var supervisor = _supervisor;
             _ = Task.Run(() => WindowStyler.HideFromTaskbar(supervisor.WaitForWindowHandle(10000)));
+            StartTaskbarWatch();
         }
 
         _controller = new MpvController(pipeName);
@@ -368,6 +370,25 @@ public partial class App : Application
 
         return $"\n\nПоявились новые сериалы: {names}.\nВ эфир они пока не идут — программа не знает, " +
                "докачаны ли они. Включи их галочкой в настройках, на вкладке «Что в эфире».";
+    }
+
+    /// <summary>
+    /// Присматриваем за окном проигрывателя: значок в панели задач возвращался
+    /// посреди эфира, потому что mpv пересоздаёт окно при переинициализации вывода —
+    /// например, когда у следующей серии другое разрешение. Спрятать один раз при
+    /// запуске недостаточно.
+    /// </summary>
+    private void StartTaskbarWatch()
+    {
+        _taskbarTimer?.Stop();
+        _taskbarTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _taskbarTimer.Tick += (_, _) =>
+        {
+            var hwnd = _supervisor?.CurrentWindowHandle ?? IntPtr.Zero;
+            if (hwnd != IntPtr.Zero && WindowStyler.EnsureHiddenFromTaskbar(hwnd))
+                AppLog.Write("окно плеера снова показалось в панели задач — убрал");
+        };
+        _taskbarTimer.Start();
     }
 
     /// <summary>Есть ли в плейлисте хоть одна серия (строки-комментарии не считаются).</summary>
@@ -1002,6 +1023,7 @@ public partial class App : Application
         AppLog.Write("завершение: закрываю проигрыватель и освобождаю клавиши");
         _volumeSaveTimer?.Stop();
         _hotkeyRetryTimer?.Stop();
+        _taskbarTimer?.Stop();
         _hotkeys?.Dispose();   // снимает RegisterHotKey
         if (_wndProcHook is not null && _hotkeyWindow is not null)
             Win32Properties.RemoveWndProcHookCallback(_hotkeyWindow, _wndProcHook);

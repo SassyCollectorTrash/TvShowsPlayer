@@ -47,6 +47,32 @@ public sealed class MpvSupervisor : IDisposable
         _process = process;
     }
 
+    /// <summary>Текущее окно проигрывателя (0, если его нет). Читается заново каждый
+    /// раз: mpv может пересоздать окно, и прежний HWND станет недействительным.</summary>
+    public IntPtr CurrentWindowHandle
+    {
+        get
+        {
+            var process = _process;
+            if (process is null)
+                return IntPtr.Zero;
+
+            try
+            {
+                if (process.HasExited)
+                    return IntPtr.Zero;
+
+                process.Refresh();
+
+                return process.MainWindowHandle;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or SystemException)
+            {
+                return IntPtr.Zero;
+            }
+        }
+    }
+
     /// <summary>Дождаться появления окна mpv и вернуть его HWND (0 при таймауте/выходе).</summary>
     public IntPtr WaitForWindowHandle(int timeoutMs)
     {

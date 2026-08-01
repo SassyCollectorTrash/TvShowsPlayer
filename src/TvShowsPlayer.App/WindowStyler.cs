@@ -14,6 +14,28 @@ internal static class WindowStyler
     private const int SW_HIDE = 0;
     private const int SW_SHOW = 5;
 
+    /// <summary>
+    /// Проверить, спрятано ли окно, и вернуть его в это состояние при необходимости.
+    /// mpv пересоздаёт своё окно при переинициализации вывода (например, когда у
+    /// следующей серии другие параметры видео) — новое окно приходит без нашего
+    /// стиля, и значок снова появляется в панели задач.
+    /// Возвращает true, если пришлось исправлять.
+    /// </summary>
+    public static bool EnsureHiddenFromTaskbar(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+            return false;
+
+        var ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
+        var hidden = (ex & WS_EX_TOOLWINDOW) != 0 && (ex & WS_EX_APPWINDOW) == 0;
+        if (hidden)
+            return false;
+
+        HideFromTaskbar(hwnd);
+
+        return true;
+    }
+
     public static void HideFromTaskbar(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero)
