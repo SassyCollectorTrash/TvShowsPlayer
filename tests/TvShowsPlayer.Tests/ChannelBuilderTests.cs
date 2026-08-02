@@ -74,6 +74,47 @@ public class ChannelBuilderTests : IDisposable
         ChannelState.Load(_state).PlaylistPos.Should().Be(42);
     }
 
+    // Пересборка происходит от любой мелочи: докачалась серия, добавили сериал. Если
+    // при этом обнулять секунду внутри серии, обещанное «продолжится с того же места»
+    // работало бы только когда в папке ничего не менялось — то есть почти никогда.
+    [Fact]
+    public void Build_WhenSameEpisodeResumed_ShouldKeepTimeInsideIt()
+    {
+        MakeShow("Alpha", 6);
+        MakeShow("Beta", 6);
+        ChannelBuilder.Build(Options());
+
+        var state = ChannelState.Load(_state);
+        state.Shows["Beta"] = "04.mkv";
+        state.Current = "Beta";
+        state.TimePos = 431;
+        state.Save(_state);
+
+        MakeShow("Gamma", 5);   // состав изменился → пересборка
+        ChannelBuilder.Build(Options());
+
+        ChannelState.Load(_state).TimePos.Should().Be(431);
+    }
+
+    // А вот если серия, на которой остановились, из эфира ушла — секунда чужая.
+    [Fact]
+    public void Build_WhenCurrentEpisodeGone_ShouldStartFromBeginning()
+    {
+        MakeShow("Alpha", 6);
+        MakeShow("Beta", 6);
+        ChannelBuilder.Build(Options());
+
+        var state = ChannelState.Load(_state);
+        state.Shows["Beta"] = "04.mkv";
+        state.Current = "Beta";
+        state.TimePos = 431;
+        state.Save(_state);
+
+        ChannelBuilder.Build(Options("Beta"));   // сериал выключили из эфира
+
+        ChannelState.Load(_state).TimePos.Should().Be(0);
+    }
+
     [Fact]
     public void Build_CompositionChanged_ResumesCurrentEpisode()
     {

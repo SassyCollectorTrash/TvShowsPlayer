@@ -63,6 +63,10 @@ public partial class SettingsWindow : Window
     // сейчас нет (спящий монитор, отключённые наушники).
     private bool _fillingControls;
 
+    // Громкость на момент открытия окна: по ней видно, трогал ли человек ползунок.
+    // Если нет — при сохранении побеждает та, что накрутили с пульта уже после.
+    private readonly int _volumeWhenOpened;
+
     public SettingsWindow() : this(new AppConfig(), string.Empty, null)
     {
     }
@@ -71,6 +75,7 @@ public partial class SettingsWindow : Window
         Action? startChannel = null, Action? quitForUpdate = null)
     {
         _config = config;
+        _volumeWhenOpened = config.Volume;
         _configPath = configPath;
         _controller = controller;
         _startChannel = startChannel;
@@ -492,6 +497,25 @@ public partial class SettingsWindow : Window
         _draggingRow = null;   // уже переставлено в DragOver
     }
 
+    /// <summary>
+    /// Записать настройки, не затирая то, что программа успела сделать, пока окно
+    /// открыто: громкость с пульта и новинки, уехавшие в исключения.
+    /// </summary>
+    private void SaveConfig()
+    {
+        if (string.IsNullOrEmpty(_configPath))
+            return;
+
+        ApplyShowConfig();
+        ConfigMerge.KeepBackgroundChanges(
+            _config,
+            AppConfig.Load(_configPath),
+            _volumeWhenOpened,
+            _showRows.Select(r => r.Name).ToList());
+
+        _config.Save(_configPath);
+    }
+
     private void ApplyShowConfig()
     {
         _config.ShowOrder = _showRows.Select(r => r.Name).ToList();
@@ -585,9 +609,7 @@ public partial class SettingsWindow : Window
         {
             // Пересборка меняет канал — значит и конфиг должен лечь на диск, иначе
             // следующий запуск соберёт по старому порядку и канал «прыгнет».
-            ApplyShowConfig();
-            if (!string.IsNullOrEmpty(_configPath))
-                _config.Save(_configPath);
+            SaveConfig();
 
             var dir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
             var playlistPath = Path.Combine(dir, "channel.m3u");
@@ -783,9 +805,7 @@ public partial class SettingsWindow : Window
     // ---- сохранить / запустить ----
     private void OnSave(object? sender, RoutedEventArgs e)
     {
-        ApplyShowConfig();
-        if (!string.IsNullOrEmpty(_configPath))
-            _config.Save(_configPath);
+        SaveConfig();
 
         AppLog.Enabled = _config.LoggingEnabled;   // применяем сразу, без перезапуска
 

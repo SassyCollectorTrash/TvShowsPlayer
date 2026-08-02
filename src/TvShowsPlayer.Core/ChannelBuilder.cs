@@ -106,10 +106,23 @@ public static class ChannelBuilder
 
         PlaylistWriter.Write(options.PlaylistPath, carousel.Playlist, signature);
 
+        // Серия, на которой остановились, нашлась в новом расписании — значит и
+        // секунда внутри неё по-прежнему верна: это тот же файл. Обнуляем время
+        // только когда эта серия из эфира ушла (сериал выключили или удалили) —
+        // иначе канал стартовал бы с середины совсем другой серии.
         var current = PlaylistIndex.OfCurrentEpisode(
             carousel.Playlist, options.Root, state.Shows, state.Current);
-        state.PlaylistPos = current >= 0 ? current : 0;
-        state.TimePos = 0;
+
+        if (current >= 0)
+        {
+            state.PlaylistPos = current;
+        }
+        else
+        {
+            state.PlaylistPos = 0;
+            state.TimePos = 0;
+        }
+
         state.Save(options.StatePath);
 
         return new ChannelBuildResult
