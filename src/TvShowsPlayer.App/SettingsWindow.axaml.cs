@@ -501,19 +501,36 @@ public partial class SettingsWindow : Window
     /// Записать настройки, не затирая то, что программа успела сделать, пока окно
     /// открыто: громкость с пульта и новинки, уехавшие в исключения.
     /// </summary>
-    private void SaveConfig()
+    /// <returns>false — записать не вышло; причина уже показана человеку.</returns>
+    private bool SaveConfig()
     {
         if (string.IsNullOrEmpty(_configPath))
-            return;
+            return false;
 
         ApplyShowConfig();
-        ConfigMerge.KeepBackgroundChanges(
-            _config,
-            AppConfig.Load(_configPath),
-            _volumeWhenOpened,
-            _showRows.Select(r => r.Name).ToList());
 
-        _config.Save(_configPath);
+        // Запись может не пройти: файл занят проверкой антивируса, кончилось место,
+        // папка стала «только для чтения». Раньше это исключение уходило в цикл
+        // интерфейса и роняло программу — то есть нажатие «Сохранить» выключало канал.
+        try
+        {
+            ConfigMerge.KeepBackgroundChanges(
+                _config,
+                AppConfig.Load(_configPath),
+                _volumeWhenOpened,
+                _showRows.Select(r => r.Name).ToList());
+
+            _config.Save(_configPath);
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Write($"не удалось сохранить настройки: {ex.Message}");
+            _status.Text = $"Не удалось сохранить настройки ({ex.Message}). Попробуй ещё раз.";
+
+            return false;
+        }
     }
 
     private void ApplyShowConfig()
@@ -805,7 +822,8 @@ public partial class SettingsWindow : Window
     // ---- сохранить / запустить ----
     private void OnSave(object? sender, RoutedEventArgs e)
     {
-        SaveConfig();
+        if (!SaveConfig())
+            return;
 
         AppLog.Enabled = _config.LoggingEnabled;   // применяем сразу, без перезапуска
 
@@ -823,7 +841,13 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        OnSave(sender, e);       // канал стартует по сохранённому конфигу
+        // Канал стартует по сохранённому конфигу: если запись не прошла, запускать
+        // нечего — иначе канал поднимется по старым настройкам, а человек будет
+        // уверен, что применил новые.
+        if (!SaveConfig())
+            return;
+
+        AppLog.Enabled = _config.LoggingEnabled;
         _startChannel?.Invoke();
         Close();                 // связь с mpv в этом окне уже устарела — переоткроем свежим
     }

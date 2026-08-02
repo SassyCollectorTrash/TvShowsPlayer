@@ -42,6 +42,8 @@ public partial class App : Application
     private int _unexpectedExits;
     private bool _refreshingLibrary;
     private bool _recovering;
+    private int _recoverySkips;
+    private int _recoveryWait;
     private bool _sessionEnding;
     private bool _callMuted;
     private bool _shuttingDown;
@@ -436,6 +438,15 @@ public partial class App : Application
         if (_recovering || _refreshingLibrary || _shuttingDown || _sessionEnding)
             return;
 
+        // Поднять канал не вышло — ждём дольше. Иначе бесполезный обход всей
+        // библиотеки повторялся бы каждые полминуты круглосуточно: на внешнем диске
+        // это не даёт ему заснуть, а пользы не приносит (играть всё равно нечего).
+        if (_recoverySkips > 0)
+        {
+            _recoverySkips--;
+            return;
+        }
+
         _recovering = true;
         try
         {
@@ -449,7 +460,14 @@ public partial class App : Application
             if (_supervisor is null)
             {
                 if (StartPlayback(config) == PlaybackStart.Started)
+                {
                     AppLog.Write("папка с сериалами появилась — включаю канал");
+                    ResetRecoveryDelay();
+                }
+                else
+                {
+                    BackOffRecovery();
+                }
 
                 return;
             }
@@ -457,10 +475,16 @@ public partial class App : Application
             // Проигрыватель жив, но не играет ничего: список указывал на файлы,
             // которых в момент включения не было.
             if (_controller is null || !await _controller.GetIdleAsync())
+            {
+                ResetRecoveryDelay();   // канал играет — ждать нечего
                 return;
+            }
 
             AppLog.Write("канал молчит, а папка на месте — поднимаю эфир");
-            await RebuildAndReloadAsync(config);
+            if (await RebuildAndReloadAsync(config))
+                ResetRecoveryDelay();
+            else
+                BackOffRecovery();
         }
         catch (Exception ex)
         {
@@ -477,7 +501,23 @@ public partial class App : Application
     /// там сборка молчит, если состав не изменился, — а здесь перезагрузить нужно
     /// именно потому, что состав ТОТ ЖЕ, просто файлы снова доступны.
     /// </summary>
-    private async Task RebuildAndReloadAsync(AppConfig config)
+    // Пропуски проверок после неудачи: 1, 2, 4, 8 — но не дольше десяти (≈5 минут).
+    // Длина ожидания живёт отдельно от обратного отсчёта: если считать по остатку,
+    // он к моменту следующей попытки всегда ноль — и ожидание не растёт (проверено).
+    private void BackOffRecovery()
+    {
+        _recoveryWait = _recoveryWait == 0 ? 1 : Math.Min(_recoveryWait * 2, 10);
+        _recoverySkips = _recoveryWait;
+    }
+
+    private void ResetRecoveryDelay()
+    {
+        _recoveryWait = 0;
+        _recoverySkips = 0;
+    }
+
+    /// <returns>true — канал снова в эфире.</returns>
+    private async Task<bool> RebuildAndReloadAsync(AppConfig config)
     {
         var playlistPath = Path.Combine(_configDir, "channel.m3u");
         var statePath = ChannelPaths.ResolveStatePath(_configDir);
@@ -499,7 +539,7 @@ public partial class App : Application
         RememberShows(config, build);
 
         if (build.LibraryMissing || !HasEntries(playlistPath) || _controller is null)
-            return;
+            return false;
 
         var state = ChannelState.Load(statePath);
         await _controller.ReloadPlaylistAsync(playlistPath);
@@ -511,6 +551,8 @@ public partial class App : Application
             await _controller.SeekAsync(state.TimePos);
 
         AppLog.Write("канал снова в эфире");
+
+        return true;
     }
 
     /// <summary>Есть ли в плейлисте хоть одна серия (строки-комментарии не считаются).</summary>
@@ -541,7 +583,13 @@ public partial class App : Application
             ResolveMpvPath(config, AppContext.BaseDirectory);
 
             if (_mode == ChannelMode.Production)
+            {
+                // Номер экрана пересчитываем от его имени — ровно как при включении
+                // программы. Без этого перезапуск канала после перетыкания монитора
+                // уводил показ не на тот экран, и помогал только полный перезапуск.
+                ResolveScreen(config);
                 File.WriteAllText(Path.Combine(_configDir, "mpv.conf"), MpvConfig.Generate(config));
+            }
 
             // Окно настроек держит ссылку на старое соединение — закрываем, чтобы
             // «Сейчас в эфире» не показывало мёртвый канал.
