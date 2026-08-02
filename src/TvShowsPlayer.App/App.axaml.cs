@@ -34,12 +34,14 @@ public partial class App : Application
     private DispatcherTimer? _volumeSaveTimer;
     private DispatcherTimer? _hotkeyRetryTimer;
     private DispatcherTimer? _taskbarTimer;
+    private DispatcherTimer? _silenceTimer;
     private string _lastBuildNotice = string.Empty;
     private string _hotkeyWarning = string.Empty;
     private const int MaxUnexpectedExits = 3;
     private DateTime _firstUnexpectedExit;
     private int _unexpectedExits;
     private bool _refreshingLibrary;
+    private bool _recovering;
     private bool _sessionEnding;
     private bool _callMuted;
     private bool _shuttingDown;
@@ -56,11 +58,19 @@ public partial class App : Application
             _mode = ResolveMode();
 
             // Второй экземпляр того же режима недопустим: два канала пишут один и тот
-            // же файл состояния (и мигрируют папку под собой) — прогресс просмотра
-            // портится. Молча уходим, канал уже работает.
+            // же файл состояния — прогресс просмотра портится. Уходим, но не молча.
             if (!TryAcquireSingleInstance())
             {
                 AppLog.Write("канал уже запущен — второй экземпляр не нужен, выхожу");
+
+                // Молчаливый выход человек читает как «программа не запускается»:
+                // он жмёт по значку ещё раз и ещё. Говорим, где искать уже
+                // работающий канал.
+                AppLog.ShowInfo(
+                    "Канал уже работает.\n\n" +
+                    "Значок программы — справа внизу, рядом с часами; он может прятаться " +
+                    "под стрелкой «^». Нажми по нему правой кнопкой мыши, чтобы открыть " +
+                    "настройки или выключить канал.");
                 Environment.Exit(0);
                 return;
             }
@@ -98,15 +108,17 @@ public partial class App : Application
 
     // Один канал на режим (dev и prod не мешают друг другу — имена разные).
     // Ждём освобождения несколько секунд, а не отказываем сразу: предыдущий экземпляр
-    // может ещё завершаться — при обновлении или когда человек закрыл программу и тут
-    // же открыл снова. Мгновенный отказ выглядел бы как «не запускается вообще».
+    // может ещё завершаться — человек закрыл программу и тут же открыл снова.
+    // Ожидание обрывается сразу, как только место освободится, поэтому эти секунды
+    // тратятся только в одном случае: канал действительно уже работает. Ради этого
+    // случая они и короткие — человеку нужно быстро увидеть ответ, а не пустоту.
     private bool TryAcquireSingleInstance()
     {
         try
         {
             _instanceLock = new Mutex(initiallyOwned: false, $@"Local\{Branding.AppName}-{_mode}");
 
-            return _instanceLock.WaitOne(TimeSpan.FromSeconds(15));
+            return _instanceLock.WaitOne(TimeSpan.FromSeconds(5));
         }
         catch (AbandonedMutexException)
         {
@@ -156,6 +168,9 @@ public partial class App : Application
         // Пригодится, когда канал «показывает не на том экране».
         AppLog.Write("экраны: " + string.Join(" | ",
             DisplayDevices.List().Select(d => $"{d.Description} [{d.DeviceName}]")));
+
+        if (Autostart.Repair())
+            AppLog.Write("автозапуск указывал на прежнее место программы — путь поправлен");
 
         _configPath = Path.Combine(configDir, "appconfig.json");
         var config = AppConfig.Load(_configPath);
@@ -207,6 +222,10 @@ public partial class App : Application
             AppLog.ShowWarning(_hotkeyWarning);
             _hotkeyWarning = string.Empty;
         }
+
+        // Сторож эфира нужен в любом исходе: и когда канал пошёл (папку могут
+        // отключить позже), и когда не пошёл (её могут подключить позже).
+        StartSilenceWatch();
 
         if (started != PlaybackStart.Started)
         {
@@ -394,6 +413,104 @@ public partial class App : Application
                 AppLog.Write("окно плеера снова показалось в панели задач — убрал");
         };
         _taskbarTimer.Start();
+    }
+
+    /// <summary>
+    /// Присмотр за молчащим эфиром. Канал может стоять чёрным по причине вне
+    /// программы: внешний диск с сериалами не успел подключиться к моменту входа в
+    /// Windows, папку переименовали, отвалилась сеть. Сам проигрыватель из этого
+    /// состояния не выходит — он просто ждёт, а человек видит чёрный экран и не знает,
+    /// что делать. Раз в полминуты проверяем и поднимаем канал, как только папка
+    /// вернулась.
+    /// </summary>
+    private void StartSilenceWatch()
+    {
+        _silenceTimer?.Stop();
+        _silenceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _silenceTimer.Tick += (_, _) => _ = RecoverIfSilentAsync();
+        _silenceTimer.Start();
+    }
+
+    private async Task RecoverIfSilentAsync()
+    {
+        if (_recovering || _refreshingLibrary || _shuttingDown || _sessionEnding)
+            return;
+
+        _recovering = true;
+        try
+        {
+            var config = AppConfig.Load(_configPath);
+
+            // Папки по-прежнему нет — оживлять нечем, ждём дальше.
+            if (string.IsNullOrWhiteSpace(config.CartoonsRoot) || !Directory.Exists(config.CartoonsRoot))
+                return;
+
+            // Эфир не поднимался вовсе: на момент включения папки не было.
+            if (_supervisor is null)
+            {
+                if (StartPlayback(config) == PlaybackStart.Started)
+                    AppLog.Write("папка с сериалами появилась — включаю канал");
+
+                return;
+            }
+
+            // Проигрыватель жив, но не играет ничего: список указывал на файлы,
+            // которых в момент включения не было.
+            if (_controller is null || !await _controller.GetIdleAsync())
+                return;
+
+            AppLog.Write("канал молчит, а папка на месте — поднимаю эфир");
+            await RebuildAndReloadAsync(config);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"проверка эфира: {ex.Message}");
+        }
+        finally
+        {
+            _recovering = false;
+        }
+    }
+
+    /// <summary>
+    /// Пересобрать список и отдать его проигрывателю. Отдельно от «Обновить список»:
+    /// там сборка молчит, если состав не изменился, — а здесь перезагрузить нужно
+    /// именно потому, что состав ТОТ ЖЕ, просто файлы снова доступны.
+    /// </summary>
+    private async Task RebuildAndReloadAsync(AppConfig config)
+    {
+        var playlistPath = Path.Combine(_configDir, "channel.m3u");
+        var statePath = ChannelPaths.ResolveStatePath(_configDir);
+
+        var build = await Task.Run(() => ChannelBuilder.Build(new ChannelBuildOptions
+        {
+            Root = config.CartoonsRoot,
+            PlaylistPath = playlistPath,
+            StatePath = statePath,
+            ExcludedShows = config.ExcludedShows,
+            ShowOrder = config.ShowOrder,
+            Window = config.Window,
+            Step = config.Step,
+            CapRotations = config.CapRotations,
+            SettleAfter = TimeSpan.FromMinutes(config.SettleMinutes),
+            KnownShows = config.KnownShows,
+        }));
+
+        RememberShows(config, build);
+
+        if (build.LibraryMissing || !HasEntries(playlistPath) || _controller is null)
+            return;
+
+        var state = ChannelState.Load(statePath);
+        await _controller.ReloadPlaylistAsync(playlistPath);
+        await _controller.SetPlaylistPosAsync(Math.Max(state.PlaylistPos, 0));
+
+        // Возвращаемся и к секунде: канал молчал не по вине человека, и начинать
+        // серию заново из-за отвалившегося диска незачем.
+        if (state.TimePos > 1)
+            await _controller.SeekAsync(state.TimePos);
+
+        AppLog.Write("канал снова в эфире");
     }
 
     /// <summary>Есть ли в плейлисте хоть одна серия (строки-комментарии не считаются).</summary>
@@ -1060,6 +1177,7 @@ public partial class App : Application
         _volumeSaveTimer?.Stop();
         _hotkeyRetryTimer?.Stop();
         _taskbarTimer?.Stop();
+        _silenceTimer?.Stop();
         _hotkeys?.Dispose();   // снимает RegisterHotKey
         if (_wndProcHook is not null && _hotkeyWindow is not null)
             Win32Properties.RemoveWndProcHookCallback(_hotkeyWindow, _wndProcHook);

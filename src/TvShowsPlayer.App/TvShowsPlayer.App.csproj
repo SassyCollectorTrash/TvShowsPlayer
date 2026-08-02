@@ -32,4 +32,10 @@
     <None Include="scripts\*.lua" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Памятка для человека едет вместе со сборкой: она часть продукта, а не файл,
+       который кто-то помнит положить в архив руками. -->
+  <ItemGroup>
+    <None Include="..\..\packaging\readme.txt" Link="readme.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

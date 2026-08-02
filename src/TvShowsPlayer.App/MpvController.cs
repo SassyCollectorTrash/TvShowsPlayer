@@ -107,6 +107,13 @@ public sealed class MpvController : IDisposable
     public Task<double> GetTimePosAsync(CancellationToken cancellationToken = default) =>
         GetAsync<double>("time-pos", cancellationToken);
 
+    /// <summary>
+    /// Стоит ли проигрыватель без файла (<c>idle-active</c>) — это и есть «чёрный
+    /// экран»: играть нечего, потому что файлы оказались недоступны.
+    /// </summary>
+    public Task<bool> GetIdleAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<bool>("idle-active", cancellationToken);
+
     /// <summary>Выключен ли сейчас звук у плеера (<c>mute</c>).</summary>
     public Task<bool> GetMuteAsync(CancellationToken cancellationToken = default) =>
         GetAsync<bool>("mute", cancellationToken);

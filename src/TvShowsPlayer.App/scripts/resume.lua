@@ -1,9 +1,10 @@
--- resume.lua — канал продолжается с ТОЙ ЖЕ СЕРИИ между перезагрузками.
+-- resume.lua — канал продолжается с ТОЙ ЖЕ СЕРИИ И С ТОЙ ЖЕ СЕКУНДЫ.
 --
--- Сохраняет индекс текущей серии в плейлисте и восстанавливает его при старте.
--- Сама серия начинается С НАЧАЛА — точную секунду внутри серии не
--- восстанавливаем намеренно (после холодной загрузки это предсказуемее).
--- Хочешь посекундное продолжение — см. блок RESTORE_TIME ниже.
+-- Сохраняет индекс текущей серии в плейлисте и время внутри неё, при старте
+-- возвращается ровно туда. Перемотку делаем не сразу: сначала дожидаемся загрузки
+-- нужной серии, иначе секунда уехала бы в предыдущий файл. Если сохранённое время
+-- почти в конце серии (список успел смениться), начинаем серию сначала — иначе
+-- канал сразу перескочил бы на следующую.
 --
 -- ВАЖНО: mpv автозагружает скрипты только из <config-dir>/scripts/, поэтому файл
 -- обязан лежать именно в подпапке scripts\, а не в корне рабочей папки.
@@ -30,6 +31,11 @@ local root = mp.get_opt("channelosd-root") or ""
 -- файла, а не по номеру, поэтому вставка серии в середину не ломает прогресс.
 local progress = {}
 local current_show = nil   -- какой сериал идёт сейчас (возобновить ровно его после пересборки)
+
+-- Секунда, на которую нужно вернуться, и признак «нужная серия уже загружена».
+local seek_target = nil
+local seek_ready = false
+local SEEK_TAIL_GUARD = 15   -- ближе этого к концу серии не возвращаемся
 
 local restored = false
 local restore_tries = 0
@@ -151,24 +157,49 @@ local function restore_state()
     end
 
     if s.playlist_pos < count then
+        local switched = false
         if (mp.get_property_number("playlist-pos", 0) or 0) ~= s.playlist_pos then
             mp.set_property_number("playlist-pos", s.playlist_pos)
+            switched = true   -- нужная серия ещё грузится, перематывать рано
         end
-        -- RESTORE_TIME: чтобы продолжать с той же секунды, раскомментируй:
-        -- if s.time_pos and s.time_pos > 1 then
-        --     local tp = s.time_pos
-        --     mp.add_timeout(0.7, function()
-        --         mp.commandv("seek", tp, "absolute", "exact")
-        --     end)
-        -- end
+
+        if s.time_pos and s.time_pos > 1 then
+            seek_target = s.time_pos
+            seek_ready = not switched
+        end
     end
 
     restored = true   -- успех — фиксируем, повторно не восстанавливаем
     rlog("restore -> " .. s.playlist_pos .. " (count=" .. count .. ", try=" .. restore_tries .. ", src=" .. src .. ")")
 end
 
+-- Возврат на сохранённую секунду. Обработчик зарегистрирован ПОСЛЕ restore_state,
+-- поэтому на том же событии знает, переключалась ли серия: если да — ждёт
+-- следующего file-loaded, когда нужная серия уже загружена.
+local function apply_seek()
+    if not seek_target then return end
+
+    if not seek_ready then
+        seek_ready = true   -- взвели на этом событии, перематываем на следующем
+        return
+    end
+
+    local t = seek_target
+    seek_target = nil
+
+    local duration = mp.get_property_number("duration", 0) or 0
+    if duration > 0 and t > duration - SEEK_TAIL_GUARD then
+        rlog(string.format("resume time %.0f — почти конец серии (%.0f), начинаю сначала", t, duration))
+        return
+    end
+
+    mp.commandv("seek", t, "absolute", "exact")
+    rlog(string.format("resume time -> %.0f", t))
+end
+
 load_progress()
 mp.register_event("file-loaded", restore_state)
+mp.register_event("file-loaded", apply_seek)
 mp.register_event("file-loaded", record_progress)
 mp.register_event("shutdown", save_state)
 mp.add_periodic_timer(15, save_state)
