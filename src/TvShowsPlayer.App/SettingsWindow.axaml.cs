@@ -222,8 +222,15 @@ public partial class SettingsWindow : Window
             _updateButton.IsEnabled = false;
             _status.Text = "Скачиваю обновление…";
 
+            var installDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+            if (!UpdateInstaller.CanUpdateInPlace(installDir))
+            {
+                Fail("Папку программы нельзя изменить (она защищена от записи)");
+                return;
+            }
+
             var progress = new Progress<int>(p => _status.Text = $"Скачиваю обновление… {p}%");
-            var archive = await UpdateInstaller.DownloadAsync(Http, update, progress, _closing.Token);
+            var archive = await UpdateInstaller.DownloadAsync(Http, update, installDir, progress, _closing.Token);
             if (archive is null)
             {
                 Fail("Не получилось скачать обновление");
@@ -231,7 +238,6 @@ public partial class SettingsWindow : Window
             }
 
             _status.Text = "Проверяю скачанное…";
-            var installDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             var newVersion = await Task.Run(() => UpdateInstaller.PrepareNewVersion(archive, installDir));
             if (newVersion is null)
             {
@@ -240,7 +246,9 @@ public partial class SettingsWindow : Window
             }
             AppLog.Write($"обновление до {update.Version}: подменяю файлы в {installDir}");
 
-            UpdateInstaller.LaunchSwap(newVersion, installDir, Environment.ProcessId);
+            UpdateInstaller.LaunchSwap(
+                newVersion, installDir, Environment.ProcessId,
+                AppLog.Directory ?? Path.GetDirectoryName(_configPath) ?? installDir);
             _status.Text = "Закрываю программу для обновления…";
 
             // Программа должна уйти: сценарий ждёт именно её завершения, а затем
@@ -249,8 +257,10 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
+            // Причину показываем прямо в окне: «не получилось» без объяснения не
+            // оставляет человеку ни одной зацепки.
             AppLog.Write($"обновление не удалось: {ex.Message}");
-            Fail("Не получилось обновиться");
+            Fail($"Не получилось обновиться ({ex.Message})");
         }
 
         void Fail(string message)

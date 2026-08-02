@@ -6,28 +6,63 @@ using TvShowsPlayer.Core;
 namespace TvShowsPlayer.App;
 
 /// <summary>
-/// Обновление одной кнопкой: скачать архив релиза, проверить его и заменить файлы
-/// программы. Заменить самого себя на ходу нельзя — работающий exe занят, поэтому
-/// подмену делает отдельный сценарий: он ждёт закрытия программы, копирует новые
-/// файлы поверх старых и запускает её снова.
+/// Обновление одной кнопкой: скачать архив релиза, проверить его и поставить новую
+/// версию. Заменить самого себя на ходу нельзя — работающий exe занят, поэтому
+/// подмену делает отдельный сценарий: он ждёт закрытия программы, переименовывает
+/// папки и запускает её снова.
+///
+/// Всё происходит РЯДОМ С ПРОГРАММОЙ: скачивание — в её папку, распаковка — в
+/// соседнюю с тем же именем и суффиксом. Временная папка системы не годится: она
+/// обычно на другом диске, а переносить папку между дисками Windows не позволяет.
 /// </summary>
 internal static class UpdateInstaller
 {
     /// <summary>Имя главного файла — по нему проверяем, что скачали именно программу.</summary>
     private const string MainExecutable = "TvShowsPlayer.App.exe";
 
-    public static string WorkFolder =>
-        Path.Combine(Path.GetTempPath(), $"{Branding.AppName}-update");
+    /// <summary>Куда скачиваем архив — внутрь папки программы (уедет вместе с ней).</summary>
+    public static string DownloadFolder(string installDir) => Path.Combine(installDir, "update");
+
+    /// <summary>
+    /// Получится ли обновиться на этом месте. Писать нужно и в саму папку программы
+    /// (туда скачивается архив), и рядом с ней (там появляется новая версия, туда же
+    /// отодвигается прежняя). В защищённых местах вроде «Program Files» этого нельзя —
+    /// лучше сказать об этом до скачивания сотни мегабайт.
+    /// </summary>
+    public static bool CanUpdateInPlace(string installDir)
+    {
+        var parent = Path.GetDirectoryName(installDir);
+
+        return IsWritable(installDir) && parent is not null && IsWritable(parent);
+    }
+
+    private static bool IsWritable(string folder)
+    {
+        var probe = Path.Combine(folder, $"localtv-{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            File.WriteAllBytes(probe, Array.Empty<byte>());
+            File.Delete(probe);
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>Скачать архив обновления. Возвращает путь к нему или null при неудаче.</summary>
     public static async Task<string?> DownloadAsync(
-        HttpClient http, UpdateInfo update, IProgress<int> progress, CancellationToken ct)
+        HttpClient http, UpdateInfo update, string installDir, IProgress<int> progress, CancellationToken ct)
     {
         if (update.DownloadUrl is null)
             return null;
 
-        Directory.CreateDirectory(WorkFolder);
-        var target = Path.Combine(WorkFolder, update.FileName ?? "update.zip");
+        var folder = DownloadFolder(installDir);
+        Directory.CreateDirectory(folder);
+        var target = Path.Combine(folder, update.FileName ?? "update.zip");
 
         using var response = await http.GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
@@ -70,29 +105,29 @@ internal static class UpdateInstaller
     /// </summary>
     public static string? PrepareNewVersion(string zipPath, string installDir)
     {
+        // Соседняя папка с тем же именем и суффиксом: подменить папку «изнутри неё
+        // самой» нельзя, а сосед на том же диске переименовывается мгновенно.
         var staging = installDir + ".new";
+
         if (Directory.Exists(staging))
             Directory.Delete(staging, recursive: true);
 
         CleanupLeftovers(installDir);
 
-        var unpacked = Path.Combine(WorkFolder, "unpacked");
-        if (Directory.Exists(unpacked))
-            Directory.Delete(unpacked, recursive: true);
+        ZipFile.ExtractToDirectory(zipPath, staging);
 
-        ZipFile.ExtractToDirectory(zipPath, unpacked);
-
-        // В архиве верхняя папка (LocalTV) — нас интересует та, где лежит exe.
+        // Внутри архива верхняя папка (LocalTV) — нас интересует та, где лежит exe.
         var exe = Directory
-            .EnumerateFiles(unpacked, MainExecutable, SearchOption.AllDirectories)
+            .EnumerateFiles(staging, MainExecutable, SearchOption.AllDirectories)
             .FirstOrDefault();
 
         if (exe is null)
+        {
+            Directory.Delete(staging, recursive: true);
             return null;
+        }
 
-        Directory.Move(Path.GetDirectoryName(exe)!, staging);
-
-        return staging;
+        return Path.GetDirectoryName(exe);
     }
 
     /// <summary>Убрать папки, оставшиеся от прошлых обновлений (могли не удалиться).</summary>
@@ -103,7 +138,7 @@ internal static class UpdateInstaller
         if (parent is null || !Directory.Exists(parent))
             return;
 
-        foreach (var folder in Directory.EnumerateDirectories(parent, prefix + "*"))
+        foreach (var folder in Directory.EnumerateDirectories(parent, prefix + "*").ToList())
         {
             try
             {
@@ -120,17 +155,19 @@ internal static class UpdateInstaller
     /// Запустить подмену файлов и перезапуск. Программа после этого должна закрыться:
     /// сценарий ждёт именно её завершения.
     /// </summary>
-    public static void LaunchSwap(string newVersionDir, string installDir, int processId)
+    /// <param name="workFolder">Папка настроек программы: сценарий и его протокол
+    /// кладём туда — она не переименовывается при подмене и переживёт обновление.</param>
+    public static void LaunchSwap(string newVersionDir, string installDir, int processId, string workFolder)
     {
-        Directory.CreateDirectory(WorkFolder);   // папки может не быть: временные чистятся
-        var script = Path.Combine(WorkFolder, "update.ps1");
+        Directory.CreateDirectory(workFolder);
+        var script = Path.Combine(workFolder, "update.ps1");
         File.WriteAllText(script, SwapScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
         var info = new ProcessStartInfo("powershell.exe")
         {
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = Path.GetTempPath(),   // не держим папку программы занятой
+            WorkingDirectory = workFolder,   // не держим папку программы занятой
         };
         info.ArgumentList.Add("-NoProfile");
         info.ArgumentList.Add("-ExecutionPolicy");
@@ -144,14 +181,14 @@ internal static class UpdateInstaller
         Process.Start(info);
     }
 
-    // Сценарий подмены. Пишем ПОВЕРХ, ничего заранее не удаляя: если копирование
-    // сорвётся, старая версия останется рабочей. Обо всём ведём протокол рядом —
-    // без него неудачное обновление выглядело бы как «программа пропала».
+    // Сценарий подмены. Прежнюю версию не удаляем, а отодвигаем: если поставить новую
+    // не выйдет, возвращаем её на место. Протокол ведём рядом со сценарием — без него
+    // неудачное обновление выглядело бы как «программа пропала».
     private const string SwapScript = """
         param([string]$NewVersion, [string]$InstallDir, [int]$ProcessId)
 
         $ErrorActionPreference = 'Stop'
-        $log = Join-Path $env:TEMP 'LocalTV-update\update.log'
+        $log = Join-Path $PSScriptRoot 'update.log'
         function Note($text) {
             "$([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss')) $text" | Out-File -FilePath $log -Append -Encoding utf8
         }
@@ -198,10 +235,11 @@ internal static class UpdateInstaller
 
             Note $(if ($started) { 'обновление завершено' } else { 'ВНИМАНИЕ: программа не запустилась после обновления' })
 
-            # Прежняя версия больше не нужна. Не удалилась — уберём при следующем
-            # обновлении, это не повод пугать пользователя.
+            # Прежняя версия и пустая оболочка от распаковки больше не нужны. Не
+            # удалились — уберём при следующем обновлении, пугать этим незачем.
             Start-Sleep -Seconds 5
             Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath "$InstallDir.new" -Recurse -Force -ErrorAction SilentlyContinue
         } catch {
             Note "ошибка обновления: $($_.Exception.Message)"
             try { Start-Process -FilePath $exe -WorkingDirectory $InstallDir } catch { Note 'запустить программу не удалось' }
