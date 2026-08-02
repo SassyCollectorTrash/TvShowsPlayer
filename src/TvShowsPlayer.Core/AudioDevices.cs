@@ -29,4 +29,22 @@ public static class AudioDevices
 
         return devices;
     }
+
+    /// <summary>
+    /// Список для окна настроек, в котором ОБЯЗАТЕЛЬНО есть выбранное устройство —
+    /// даже если проигрыватель его сейчас не видит (монитор спит, наушники
+    /// отключены, звуковую карту переустанавливали). Иначе окно показало бы
+    /// «автовыбор», а сохранение молча стёрло бы настройку — и звук ушёл бы не туда,
+    /// куда человек его отправлял.
+    /// </summary>
+    public static IReadOnlyList<AudioDevice> WithStored(
+        IReadOnlyList<AudioDevice> available, string? storedId)
+    {
+        if (string.IsNullOrEmpty(storedId) || available.Any(d => d.Id == storedId))
+            return available;
+
+        return available
+            .Append(new AudioDevice(storedId, "Прежний выбор — сейчас не подключено"))
+            .ToList();
+    }
 }

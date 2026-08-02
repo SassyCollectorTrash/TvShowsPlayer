@@ -57,6 +57,12 @@ public partial class SettingsWindow : Window
     private Point _dragStart;
     private DispatcherTimer? _refreshTimer;
 
+    // Окно само подставляет сохранённые значения в списки, и это вызывает те же
+    // события, что и выбор мышью. Без этого признака подстановка «выбирала» за
+    // человека — и молча стирала его настройку, если сохранённого пункта в списке
+    // сейчас нет (спящий монитор, отключённые наушники).
+    private bool _fillingControls;
+
     public SettingsWindow() : this(new AppConfig(), string.Empty, null)
     {
     }
@@ -119,6 +125,9 @@ public partial class SettingsWindow : Window
 
     private void OnHotkeyModifiersChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (_fillingControls)
+            return;
+
         if (sender is ComboBox { SelectedItem: string set })
             _config.HotkeyModifiers = set;
     }
@@ -141,12 +150,16 @@ public partial class SettingsWindow : Window
 
     private void OnScreenChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (_fillingControls)
+            return;   // окно само подставило сохранённый экран — это не выбор человека
+
         if (sender is not ComboBox { SelectedItem: DisplayDevice screen })
             return;
 
         // Проигрывателю нужен номер, имя храним для пересчёта номера в будущем.
         _config.ScreenName = screen.DeviceName;
         _config.FsScreen = screen.Index;
+        AppLog.Write($"выбран экран: {screen.Description} [{screen.DeviceName}]");
     }
 
     // Мониторы показываем по названию модели, а не номером: «Экран 1» ни о чём не
@@ -154,11 +167,20 @@ public partial class SettingsWindow : Window
     private void PopulateScreens()
     {
         var screens = DisplayDevices.List();
-        _screenBox.ItemsSource = screens;
-        _screenBox.SelectedItem =
-            screens.FirstOrDefault(s => s.DeviceName == _config.ScreenName)
-            ?? screens.ElementAtOrDefault(_config.FsScreen)   // конфиг из прежней версии
-            ?? screens.FirstOrDefault();
+
+        _fillingControls = true;
+        try
+        {
+            _screenBox.ItemsSource = screens;
+            _screenBox.SelectedItem =
+                screens.FirstOrDefault(s => s.DeviceName == _config.ScreenName)
+                ?? screens.ElementAtOrDefault(_config.FsScreen)   // конфиг из прежней версии
+                ?? screens.FirstOrDefault();
+        }
+        finally
+        {
+            _fillingControls = false;
+        }
     }
 
     // ---- диагностика библиотеки: как распознались серии ----
@@ -664,13 +686,26 @@ public partial class SettingsWindow : Window
     private async Task PopulateAudioDevicesAsync()
     {
         var mpvPath = _config.MpvPath;
-        var devices = await Task.Run(() => QueryAudioDevices(mpvPath));
+        var found = await Task.Run(() => QueryAudioDevices(mpvPath));
         if (_closing.IsCancellationRequested)
             return;
 
-        _audioBox.ItemsSource = devices;
-        _audioBox.SelectedItem = devices.FirstOrDefault(d => d.Id == _config.AudioDevice)
-                                 ?? devices.FirstOrDefault(d => d.Id == "auto");
+        // Выбранное устройство держим в списке, даже если сейчас его не видно.
+        var devices = AudioDevices.WithStored(found, _config.AudioDevice);
+        if (devices.Count != found.Count)
+            AppLog.Write($"выбранный звуковой выход сейчас недоступен: {_config.AudioDevice}");
+
+        _fillingControls = true;
+        try
+        {
+            _audioBox.ItemsSource = devices;
+            _audioBox.SelectedItem = devices.FirstOrDefault(d => d.Id == _config.AudioDevice)
+                                     ?? devices.FirstOrDefault(d => d.Id == "auto");
+        }
+        finally
+        {
+            _fillingControls = false;
+        }
     }
 
     private static IReadOnlyList<AudioDevice> QueryAudioDevices(string mpvPath)
@@ -699,8 +734,14 @@ public partial class SettingsWindow : Window
 
     private void OnAudioDeviceChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (_fillingControls)
+            return;   // это окно подставило сохранённое значение, а не человек выбрал
+
         if (sender is ComboBox { SelectedItem: AudioDevice device })
+        {
             _config.AudioDevice = device.Id;
+            AppLog.Write($"выбран звуковой выход: {device.Description}");
+        }
     }
 
     // ---- пикеры путей ----
