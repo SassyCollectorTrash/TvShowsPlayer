@@ -1,9 +1,8 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
-using TvShowsPlayer.Core;
 
-namespace TvShowsPlayer.App;
+namespace TvShowsPlayer.Core;
 
 /// <summary>
 /// Обновление одной кнопкой: скачать архив релиза, проверить его и поставить новую
@@ -14,8 +13,12 @@ namespace TvShowsPlayer.App;
 /// Всё происходит РЯДОМ С ПРОГРАММОЙ: скачивание — в её папку, распаковка — в
 /// соседнюю с тем же именем и суффиксом. Временная папка системы не годится: она
 /// обычно на другом диске, а переносить папку между дисками Windows не позволяет.
+///
+/// Главное правило: прежняя версия удаляется последней — только после того, как
+/// новая запустилась и удержалась. Пока этого не случилось, к ней всегда можно
+/// вернуться.
 /// </summary>
-internal static class UpdateInstaller
+public static class UpdateInstaller
 {
     /// <summary>Имя главного файла — по нему проверяем, что скачали именно программу.</summary>
     private const string MainExecutable = "TvShowsPlayer.App.exe";
@@ -124,21 +127,49 @@ internal static class UpdateInstaller
         if (exe is null)
         {
             Directory.Delete(staging, recursive: true);
+            DiscardDownload(zipPath, installDir);
+
             return null;
         }
 
+        DiscardDownload(zipPath, installDir);
+
         return Path.GetDirectoryName(exe);
+    }
+
+    /// <summary>
+    /// Скачанный архив весит около сотни мегабайт и после распаковки не нужен. Удаляем
+    /// только то, что скачали сами: путь со стороны трогать нельзя.
+    /// </summary>
+    private static void DiscardDownload(string zipPath, string installDir)
+    {
+        var folder = DownloadFolder(installDir);
+        if (!string.Equals(Path.GetDirectoryName(zipPath), folder, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        try
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // уедет вместе с прежней версией при подмене
+        }
     }
 
     /// <summary>Убрать папки, оставшиеся от прошлых обновлений (могли не удалиться).</summary>
     private static void CleanupLeftovers(string installDir)
     {
         var parent = Path.GetDirectoryName(installDir);
-        var prefix = Path.GetFileName(installDir) + ".old-";
+        var name = Path.GetFileName(installDir);
         if (parent is null || !Directory.Exists(parent))
             return;
 
-        foreach (var folder in Directory.EnumerateDirectories(parent, prefix + "*").ToList())
+        var leftovers = Directory.EnumerateDirectories(parent, name + ".old-*")
+            .Concat(Directory.EnumerateDirectories(parent, name + ".broken-*"))
+            .ToList();
+
+        foreach (var folder in leftovers)
         {
             try
             {
@@ -181,9 +212,10 @@ internal static class UpdateInstaller
         Process.Start(info);
     }
 
-    // Сценарий подмены. Прежнюю версию не удаляем, а отодвигаем: если поставить новую
-    // не выйдет, возвращаем её на место. Протокол ведём рядом со сценарием — без него
-    // неудачное обновление выглядело бы как «программа пропала».
+    // Сценарий подмены. Прежнюю версию не удаляем, а отодвигаем: пока новая не
+    // доказала, что работает, к прежней можно вернуться — и на каждом шаге мы это
+    // делаем. Протокол ведём рядом со сценарием: без него неудачное обновление
+    // выглядело бы как «программа пропала».
     private const string SwapScript = """
         param([string]$NewVersion, [string]$InstallDir, [int]$ProcessId)
 
@@ -194,13 +226,37 @@ internal static class UpdateInstaller
         }
 
         $exe = Join-Path $InstallDir 'TvShowsPlayer.App.exe'
-        $old = "$InstallDir.old-" + (Get-Date -Format 'yyyyMMdd-HHmmss')
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $old = "$InstallDir.old-$stamp"
+
+        # Запуск считается удачным, только если программа не закрылась сразу: иначе
+        # человек остался бы после обновления без канала.
+        function Start-Channel {
+            for ($try = 1; $try -le 3; $try++) {
+                Note "запускаю $exe (попытка $try)"
+                $launched = Start-Process -FilePath $exe -WorkingDirectory $InstallDir -PassThru
+                Start-Sleep -Seconds 4
+                if ($launched -and -not $launched.HasExited) { return $true }
+                Note 'программа не удержалась — пробую снова'
+                Start-Sleep -Seconds 3
+            }
+            return $false
+        }
 
         try {
             Note "жду закрытия программы (PID $ProcessId)"
-            for ($i = 0; $i -lt 30; $i++) {
-                if (-not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) { break }
+            $closed = $false
+            for ($i = 0; $i -lt 60; $i++) {
+                if (-not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) { $closed = $true; break }
                 Start-Sleep -Milliseconds 500
+            }
+
+            # Пока прежняя версия работает, папки трогать нельзя: она держит свои файлы,
+            # да и новая копия не поднимется — программа не разрешает две сразу.
+            if (-not $closed) {
+                Note 'программа не закрылась за 30 секунд — обновление отменено, ничего не изменено'
+                Remove-Item -LiteralPath "$InstallDir.new" -Recurse -Force -ErrorAction SilentlyContinue
+                return
             }
 
             # Переименование, а не перезапись: занятые файлы (проигрыватель, сама
@@ -220,28 +276,36 @@ internal static class UpdateInstaller
                 throw
             }
 
-            # Запуск проверяем: программа должна не только стартовать, но и остаться
-            # работать. Иначе человек после обновления остался бы без канала и без
-            # единого следа о том, что случилось.
-            $started = $false
-            for ($try = 1; $try -le 3; $try++) {
-                Note "запускаю $exe (попытка $try)"
-                $launched = Start-Process -FilePath $exe -WorkingDirectory $InstallDir -PassThru
-                Start-Sleep -Seconds 4
-                if ($launched -and -not $launched.HasExited) { $started = $true; break }
-                Note 'программа не удержалась — пробую снова'
-                Start-Sleep -Seconds 3
+            if (-not (Start-Channel)) {
+                # Новая версия не держится. Прежняя ещё цела — возвращаем её на место:
+                # удалять рабочую версию, не убедившись в новой, нельзя.
+                Note 'новая версия не запускается — возвращаю прежнюю'
+                $broken = "$InstallDir.broken-$stamp"
+                Move-Item -LiteralPath $InstallDir -Destination $broken -Force
+                Move-Item -LiteralPath $old -Destination $InstallDir -Force
+                Note $(if (Start-Channel) { 'прежняя версия вернулась и работает' } else { 'ВНИМАНИЕ: не запускается и прежняя версия' })
+                Remove-Item -LiteralPath $broken -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath "$InstallDir.new" -Recurse -Force -ErrorAction SilentlyContinue
+                return
             }
 
-            Note $(if ($started) { 'обновление завершено' } else { 'ВНИМАНИЕ: программа не запустилась после обновления' })
+            Note 'обновление завершено'
 
-            # Прежняя версия и пустая оболочка от распаковки больше не нужны. Не
-            # удалились — уберём при следующем обновлении, пугать этим незачем.
+            # Прежнюю версию удаляем последней — теперь, когда новая работает. Не
+            # удалилась (файл ещё занят) — уберём при следующем обновлении.
             Start-Sleep -Seconds 5
             Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath "$InstallDir.new" -Recurse -Force -ErrorAction SilentlyContinue
         } catch {
             Note "ошибка обновления: $($_.Exception.Message)"
+
+            # Что бы ни случилось, программа должна остаться на своём месте.
+            if (-not (Test-Path -LiteralPath $exe) -and (Test-Path -LiteralPath $old)) {
+                Note 'возвращаю прежнюю версию на место'
+                try { Move-Item -LiteralPath $old -Destination $InstallDir -Force }
+                catch { Note "вернуть не вышло: $($_.Exception.Message)" }
+            }
+
             try { Start-Process -FilePath $exe -WorkingDirectory $InstallDir } catch { Note 'запустить программу не удалось' }
         }
         """;
